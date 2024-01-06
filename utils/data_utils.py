@@ -799,8 +799,13 @@ class TransformTwice:
         self.transform = transform
 
     def __call__(self, inp):
-        out1 = self.transform(inp)
-        out2 = self.transform(inp)
+        if self.transform != None:
+            out1 = self.transform(inp)
+            out2 = self.transform(inp)
+        else:
+            out1 = inp
+            out2 = inp
+
         return out1, out2
 
 class LocalDataset(Dataset):
@@ -834,6 +839,10 @@ class LocalDatasetSSLLabel(Dataset):
         else:
             data_i = self.data[index]
         return index, data_i, self.target[index]
+    
+
+    def __len__(self):
+        return self.target.shape[0]
 
 class LocalDatasetSSLUnLabel(Dataset):
     def __init__(self, data, target, transform=None):
@@ -847,6 +856,9 @@ class LocalDatasetSSLUnLabel(Dataset):
         else:
             data_i = self.data[index]
         return index, data_i, self.target[index]
+
+    def __len__(self):
+        return self.target.shape[0]
 
 
 class AggDataset(Dataset):

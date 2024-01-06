@@ -16,16 +16,65 @@ from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, roc_au
 
 from torchdp.privacy_engine import PrivacyEngine
 import torch_optimizer as adv_optim
+import torch.nn.functional as F
+
 
 import os.path
 
 from model.models import FC, AggModel, CNN, ResNet18, SmallCNN, BareSmallCNN, NCF
 from utils.utils import generate_random_targets, calc_optimal_target_permutation, \
     is_perturbation
-from utils.data_utils import LocalDataset, AggDataset, ImageDataset
+from utils.data_utils import LocalDataset, AggDataset, ImageDataset, LocalDatasetSSLUnLabel, LocalDatasetSSLLabel
 from utils.utils import convert_name_to_path
 from utils.exceptions import *
 from privacy.eps_calculator import GradientDPCalculator, GaussianDPCalculator
+
+def interleave_offsets(batch, nu):
+    groups = [batch // (nu + 1)] * (nu + 1)
+    for x in range(batch - sum(groups)):
+        groups[-x - 1] += 1
+    offsets = [0]
+    for g in groups:
+        offsets.append(offsets[-1] + g)
+    assert offsets[-1] == batch
+    return offsets
+
+
+def interleave(xy, batch):
+    nu = len(xy) - 1
+    offsets = interleave_offsets(batch, nu)
+    xy = [[v[offsets[p]:offsets[p + 1]] for p in range(nu + 1)] for v in xy]
+    for i in range(1, nu + 1):
+        xy[0][i], xy[i][i] = xy[i][i], xy[0][i]
+    return [torch.cat(v, dim=0) for v in xy]
+
+
+class AverageMeter(object):
+    """Computes and stores the average and current value
+       Imported from https://github.com/pytorch/examples/blob/master/imagenet/main.py#L247-L262
+    """
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+
+def linear_rampup(current, rampup_length=100):
+    if rampup_length == 0:
+        return 1.0
+    else:
+        current = np.clip(current / rampup_length, 0.0, 1.0)
+        return float(current)
 
 
 class SemiLoss(object):
@@ -35,7 +84,7 @@ class SemiLoss(object):
         Lx = -torch.mean(torch.sum(F.log_softmax(outputs_x, dim=1) * targets_x, dim=1))
         Lu = torch.mean((probs_u - targets_u)**2)
 
-        return Lx, Lu, args.lambda_u * linear_rampup(epoch)
+        return Lx, Lu, 75 * linear_rampup(epoch)
 
 class VerticalFLModel:
     def __init__(self, num_parties, active_party_id, name="", num_epochs=100, num_local_rounds=1, local_lr=1e-4,
@@ -288,7 +337,7 @@ class VerticalFLModel:
             X_unalign_tensor = X_tensor[~mask]
             y_unalign_tensor = y_tensor[~mask]
              
-            align_dataset = LocalDataset(X_align_tensor, y_align_tensor)
+            align_dataset = LocalDatasetSSLLabel(X_align_tensor, y_align_tensor)
             unalign_dataset = LocalDatasetSSLUnLabel(X_unalign_tensor, y_unalign_tensor)
         elif self.task in ["multi_classification"]:
             # image classification, X is an ndarray of PIL images
@@ -307,7 +356,7 @@ class VerticalFLModel:
                     X_unalign_tensor = X_tensor[~mask]
                     y_unalign_tensor = y_tensor[~mask]
 
-                    align_dataset = LocalDataset(X_align_tensor, y_align_tensor)
+                    align_dataset = LocalDatasetSSLLabel(X_align_tensor, y_align_tensor)
                     unalign_dataset = LocalDatasetSSLUnLabel(X_unalign_tensor, y_unalign_tensor)
                 else:
                     transform_train = transforms.Compose([
@@ -392,6 +441,11 @@ class VerticalFLModel:
         unlabeled_train_iter = iter(unlabeled_trainloader)
 
         model.train()
+
+        losses = AverageMeter()
+        losses_x = AverageMeter()
+        losses_u = AverageMeter()
+
         for batch_idx in range(train_iteration):
             try:
                 data = labeled_train_iter.next()
@@ -400,15 +454,14 @@ class VerticalFLModel:
                 labeled_train_iter = iter(labeled_trainloader)
                 data = labeled_train_iter.next()
                 idx, inputs_x, targets_x = data
-
+            
+            # import pdb; pdb.set_trace()
+            
             try:
-                (inputs_u, inputs_u2), _ = unlabeled_train_iter.next()
+                idx, (inputs_u, inputs_u2), _ = unlabeled_train_iter.next()
             except:
                 unlabeled_train_iter = iter(unlabeled_trainloader)
-                (inputs_u, inputs_u2), _ = unlabeled_train_iter.next()
-
-            # measure data loading time
-            data_time.update(time.time() - end)
+                idx, (inputs_u, inputs_u2), _ = unlabeled_train_iter.next()
 
             batch_size = inputs_x.size(0)
 
@@ -426,7 +479,7 @@ class VerticalFLModel:
                 outputs_u = model(inputs_u)
                 outputs_u2 = model(inputs_u2)
                 p = (torch.softmax(outputs_u, dim=1) + torch.softmax(outputs_u2, dim=1)) / 2
-                pt = p**(1/args.T)
+                pt = p**(1/0.5)
                 targets_u = pt / pt.sum(dim=1, keepdim=True)
                 targets_u = targets_u.detach()
 
@@ -434,7 +487,7 @@ class VerticalFLModel:
             all_inputs = torch.cat([inputs_x, inputs_u, inputs_u2], dim=0)
             all_targets = torch.cat([targets_x, targets_u, targets_u], dim=0)
 
-            l = np.random.beta(args.alpha, args.alpha)
+            l = np.random.beta(0.75, 0.75)
 
             l = max(l, 1-l)
 
@@ -459,7 +512,7 @@ class VerticalFLModel:
             logits_x = logits[0]
             logits_u = torch.cat(logits[1:], dim=0)
 
-            Lx, Lu, w = criterion(logits_x, mixed_target[:batch_size], logits_u, mixed_target[batch_size:], epoch+batch_idx/args.train_iteration)
+            Lx, Lu, w = criterion(logits_x, mixed_target[:batch_size], logits_u, mixed_target[batch_size:], epoch+batch_idx/train_iteration)
 
             loss = Lx + w * Lu
 
@@ -467,16 +520,11 @@ class VerticalFLModel:
             losses.update(loss.item(), inputs_x.size(0))
             losses_x.update(Lx.item(), inputs_x.size(0))
             losses_u.update(Lu.item(), inputs_x.size(0))
-            ws.update(w, inputs_x.size(0))
 
             # compute gradient and do SGD step
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
 
         return (losses.avg, losses_x.avg, losses_u.avg,)
 
@@ -725,7 +773,7 @@ class VerticalFLModel:
                     self.local_models.append(local_model)
                     self.local_ssl_models.append(local_ssl_model)
                 else:
-                    if (ssl):
+                    if ssl:
                         local_model = self.train_local_party_ssl(0, party_id, Xs[party_id],
                                                          y, local_model, unalign_index)
                     else:

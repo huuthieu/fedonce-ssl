@@ -55,8 +55,7 @@ if not os.path.isfile("data/phishing"):
 
 
 # FedOnce
-def run_vertical_fl(beta, add_noise = False, remove_noise = False, overlap_ratio = 0, remove_noise_agg = False, 
-                    ssl = False):
+def run_vertical_fl(beta, add_noise = False, remove_noise = False, overlap_ratio = 0, remove_noise_agg = False):
     num_parties = 2
     cross_valid_data = load_data_cross_validation("phishing", num_parties=num_parties,
                                                   file_type='libsvm', n_fold=5, feature_ratio_beta = beta,
@@ -71,10 +70,7 @@ def run_vertical_fl(beta, add_noise = False, remove_noise = False, overlap_ratio
         noise_index = []
         if remove_noise_agg and add_noise:
             noise_index = get_random_noisy_row(xs_train[0], 0.3)
-        
-        if ssl:
-            unalign_index = get_random_noisy_row(xs_train[0], 0.3)
-#             print(noise_index)
+            print("Noise index: {}".format(noise_index))
         print("Cross Validation Fold {}".format(i))
         print("Active Party is {}".format(active_party))
         print("xs_train[0].shape", xs_train[0].shape)
@@ -114,7 +110,7 @@ def run_vertical_fl(beta, add_noise = False, remove_noise = False, overlap_ratio
             epsilon=1,
             delta=1.0/xs_train[0].shape[0]
         )
-        acc, f1, _, _ = aggregate_model.train(xs_train, y_train, xs_test, y_test, use_cache=False, noise_index = noise_index, unalign_index = unalign_index)
+        acc, f1, _, _ = aggregate_model.train(xs_train, y_train, xs_test, y_test, use_cache=False, noise_index = noise_index)
         print("Active party {} finished training.".format(active_party))
         score_list.append(acc)
         f1_summary.append(f1)
@@ -131,8 +127,8 @@ def run_vertical_fl(beta, add_noise = False, remove_noise = False, overlap_ratio
     return mean, std
 
 
-betas = np.arange(0.2, 0.8, 0.1)
-results = Parallel(n_jobs=6)(delayed(run_vertical_fl)(beta) for beta in betas)
+# betas = np.arange(0.2, 0.8, 0.1)
+# results = Parallel(n_jobs=6)(delayed(run_vertical_fl)(beta) for beta in betas)
 # print("-------------------------------------------------")
 # for beta, (mean, std) in zip(betas, results):
 #     print("Party {}, beta {:.1f}: Accuracy mean={}, std={}".format(0, beta, mean, std))
@@ -144,6 +140,7 @@ results = Parallel(n_jobs=6)(delayed(run_vertical_fl)(beta) for beta in betas)
 # results = run_vertical_fl(0.5, True, False)
 # print("-------------------------------------------------")
 
+# # remove noise
 # results = run_vertical_fl(0.5, False, True)
 # print("-------------------------------------------------")
 
@@ -215,9 +212,12 @@ results = Parallel(n_jobs=6)(delayed(run_vertical_fl)(beta) for beta in betas)
 # #
 
 # combine
+print("-------------------------------------------------")
+print("Combine")
 num_parties = 1
 cross_valid_data = load_data_cross_validation("phishing", num_parties=num_parties,
-                                              file_type='libsvm', n_fold=5)
+                                              file_type='libsvm', n_fold=5,
+                                              remove_noise=True)
 f1_summary = []
 acc_summary = []
 for party_id in range(num_parties):
@@ -248,6 +248,8 @@ for party_id in range(num_parties):
         )
         x_train = xs_train[party_id]
         x_test = xs_test[party_id]
+        print("x_train.shape", x_train.shape)
+        print("x_test.shape", x_test.shape)
         acc, f1, _,_ = single_model.train(x_train, y_train, x_test, y_test)
         acc_list.append(acc)
         f1_list.append(f1)
@@ -268,4 +270,73 @@ for i, result in enumerate(f1_summary):
     mean = np.mean(result)
     std = np.std(result)
     print("Party {}: F1-score mean={}, std={}".format(i, mean, std))
+
+## Test
+
+# print("-------------------------------------------------")
+# print("Test")
+
+# from sklearn.ensemble import RandomForestClassifier
+# from sklearn.metrics import accuracy_score, f1_score
+
+
+# num_parties = 1
+
+# cross_valid_data = load_data_cross_validation("phishing", num_parties=num_parties,
+#                                               file_type='libsvm', n_fold=5,
+#                                               remove_noise=True)
+# f1_summary = []
+# acc_summary = []
+# for party_id in range(num_parties):
+#     print("Party {} starts training".format(party_id))
+#     acc_list = []
+#     f1_list = []
+#     for i, (xs_train, y_train, xs_test, y_test) in enumerate(cross_valid_data):
+#         model = RandomForestClassifier(n_estimators=100, random_state=42)
+#         x_train = xs_train[party_id]
+#         x_test = xs_test[party_id]
+
+#         print("type(x_train)", type(x_train))
+#         print("x_train.shape", x_train.shape)
+#         print("x_test.shape", x_test.shape)
+
+#         check_equal = [np.array_equal(row_a, row_b) for row_a in x_train for row_b in x_test]
+#         print("check_equal", check_equal)
+
+#         has_common_row = any(np.array_equal(row_a, row_b) for row_a in x_train for row_b in x_test)
+#         if has_common_row:
+#             print("Có ít nhất một hàng trùng nhau.")
+#         else:
+#             print("Không có hàng nào trùng nhau.")
+
+#         model.fit(x_train, y_train)
+
+#         # Dự đoán trên tập kiểm thử
+#         y_pred = model.predict(x_test)
+
+#         # Đánh giá hiệu suất
+#         accuracy = accuracy_score(y_test, y_pred)
+#         f1 = f1_score(y_test, y_pred)
+
+#         acc_list.append(accuracy)
+#         f1_list.append(f1)
+
+#         print("Fold {}: Accuracy: {:.4f}, F1 Score: {:.4f}".format(i+1, accuracy, f1))
+
+
+#     f1_summary.append(f1_list)
+#     acc_summary.append(acc_list)
+#     print("Accuracy for party {}".format(party_id) + str(acc_list))
+#     print("F1 score for party {}".format(party_id, str(f1_list)))
+#     print("-------------------------------------------------")
+# print("Accuracy summary: " + repr(acc_summary))
+# print("F1 score summary: " + repr(f1_summary))
+# for i, result in enumerate(acc_summary):
+#     mean = np.mean(result)
+#     std = np.std(result)
+#     print("Party {}: Accuracy mean={}, std={}".format(i, mean, std))
+# for i, result in enumerate(f1_summary):
+#     mean = np.mean(result)
+#     std = np.std(result)
+#     print("Party {}: F1-score mean={}, std={}".format(i, mean, std))
     

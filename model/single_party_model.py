@@ -75,6 +75,7 @@ class SingleParty:
         if isinstance(y, csr_matrix):
             y = y.todense()
         num_instances = X.shape[0]
+        print("Number of instances: {}".format(num_instances))
 
         if self.task in ["binary_classification", "regression"]:
             if self.model_type == 'fc':

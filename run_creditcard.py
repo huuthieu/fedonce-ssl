@@ -226,6 +226,7 @@ def train_combine():
         test_f1 = f1_score(y_test, y_pred_test)
         f1_list.append(test_f1)
         print(single_model.params)
+        
     explainer = shap.Explainer(single_model.predict_score, x_train)
     shap_values = explainer.shap_values(x_test)
     feature_importance = np.abs(shap_values).mean(axis=0)

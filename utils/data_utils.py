@@ -150,7 +150,7 @@ def get_random_noisy_row(x, ratio):
 
     return noisy_rows_indices
 
-def rm_noise(x, ratio = 0.3):
+def rm_noise(x, ratio = 0.95):
     np.random.seed(0)
     num_noisy_rows = int(ratio * x.shape[0])
 
@@ -161,10 +161,10 @@ def rm_noise(x, ratio = 0.3):
 
     return x
     
-def rm_noise_list(list_x, ratio = 0.3):
+def rm_noise_list(list_x, ratio = 0.95):
     result = []
     for x in list_x:
-        result.append(rm_noise(x))
+        result.append(rm_noise(x, ratio))
     return result
 
 def vertical_split_image(x, num_parties):
@@ -295,6 +295,13 @@ def load_data_train_test(train_file_name, test_file_name=None, num_parties=1, te
     return xs_train, y_train, xs_test, y_test, x_train, x_test
 
 
+def dedup_data(X, y):
+    _, unique_indices = np.unique(X, axis=0, return_index=True)
+    X = X[unique_indices]
+    y = y[unique_indices]
+    return X, y
+
+
 def load_data_cross_validation(file_name, num_parties=1, root="data/", file_type='libsvm', n_fold=5,
                                use_cache=False, cache_path=None, csv_skiprows=1, feature_order=None,
                                shift_alpha=None, feature_ratio_beta=None,
@@ -314,6 +321,7 @@ def load_data_cross_validation(file_name, num_parties=1, root="data/", file_type
         x, y = load_svmlight_file(root + file_name)
         x = x.todense()
         x = np.asarray(x)
+        x, y = dedup_data(x, y)
 
         print("Percentage of positive labels: " + str(np.sum(y) / len(y) * 100))
         
@@ -393,7 +401,7 @@ def load_data_cross_validation(file_name, num_parties=1, root="data/", file_type
     print("{} fold spliltting".format(n_fold))
     results = []
     if n_fold > 1:
-        k_fold = KFold(n_splits=n_fold, shuffle=True, random_state=0)
+        k_fold = KFold(n_splits=n_fold, shuffle=True, random_state=10)
         for i, (train_idx, test_idx) in enumerate(k_fold.split(x, y)):
             x_train = x[train_idx]
             y_train = y[train_idx]
@@ -420,8 +428,14 @@ def load_data_cross_validation(file_name, num_parties=1, root="data/", file_type
                     xs_train, xs_test = bias_vertical_split_ratio(
                         x_train, x_test, num_good_features, good_feature_ratio_alpha)
                 else:
-                    xs_train = vertical_split(x_train, num_parties)
-                    xs_test = vertical_split(x_test, num_parties)
+                    if remove_noise:
+                        xs_train = vertical_split(x_train, num_parties)
+                        xs_test = vertical_split(x_test, num_parties)
+                        xs_train = rm_noise_list([*xs_train])
+                        y_train = rm_noise(y_train)
+                    else:
+                        xs_train = vertical_split(x_train, num_parties)
+                        xs_test = vertical_split(x_test, num_parties)
             elif file_type in ['torch']:
                 xs_train = vertical_split_image(x_train, num_parties)
                 xs_test = vertical_split_image(x_test, num_parties)
@@ -628,7 +642,8 @@ def load_nus_wide(path, download=True, label_type='airport', use_cache=True, bal
 
     return result
 
-def load_creditcardfraud(path,use_cache = True, test_rate=0.2, num_parties=2):
+def load_creditcardfraud(path,use_cache = True, test_rate=0.2, num_parties=2,
+                         remove_ratio = 0.2):
     if use_cache:
         print("Loading creditcardfraud from cache")
         result = np.load("cache/creditcardfraud.npy", allow_pickle=True)
@@ -679,6 +694,10 @@ def load_creditcardfraud(path,use_cache = True, test_rate=0.2, num_parties=2):
         train_data = bias_vertical_split(train_data, 0.3)
         test_data = bias_vertical_split(test_data, 0.3)
         
+        if remove_ratio > 0:
+            train_data = rm_noise_list([*train_data], remove_ratio)
+            train_label = rm_noise(train_label, remove_ratio)
+
         result = [train_data, train_label, test_data, test_label]
         # np.save("cache/creditcardfraud.npy", result, allow_pickle=True)
         
@@ -847,7 +866,8 @@ class LocalDatasetSSLLabel(Dataset):
 class LocalDatasetSSLUnLabel(Dataset):
     def __init__(self, data, target, transform=None):
         self.data = data
-        self.target = target
+        # self.target = target
+        self.target = np.array([-1 for i in range(len(target))])
         self.transform = TransformTwice(transform)
 
     def __getitem__(self, index):

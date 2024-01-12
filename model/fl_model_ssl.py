@@ -6,6 +6,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision.transforms import transforms
 
+import time
 from datetime import datetime
 
 torch.manual_seed(0)
@@ -17,6 +18,7 @@ from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, roc_au
 from torchdp.privacy_engine import PrivacyEngine
 import torch_optimizer as adv_optim
 import torch.nn.functional as F
+from progress.bar import Bar as Bar
 
 
 import os.path
@@ -180,6 +182,7 @@ class VerticalFLModel:
             y = y.todense()
         y_copy = y.copy()
         num_instances = X.shape[0]
+        print("Party {} has {} instances".format(party_id, num_instances))
         start_local_time = datetime.now()
 
         # define data and dataloader
@@ -337,8 +340,8 @@ class VerticalFLModel:
             X_unalign_tensor = X_tensor[~mask]
             y_unalign_tensor = y_tensor[~mask]
              
-            align_dataset = LocalDatasetSSLLabel(X_align_tensor, y_align_tensor)
-            unalign_dataset = LocalDatasetSSLUnLabel(X_unalign_tensor, y_unalign_tensor)
+            align_dataset = LocalDatasetSSLUnLabel(X_align_tensor, y_align_tensor)
+            unalign_dataset = LocalDatasetSSLLabel(X_unalign_tensor, y_unalign_tensor)
         elif self.task in ["multi_classification"]:
             # image classification, X is an ndarray of PIL images
             if self.privacy is None:
@@ -356,8 +359,8 @@ class VerticalFLModel:
                     X_unalign_tensor = X_tensor[~mask]
                     y_unalign_tensor = y_tensor[~mask]
 
-                    align_dataset = LocalDatasetSSLLabel(X_align_tensor, y_align_tensor)
-                    unalign_dataset = LocalDatasetSSLUnLabel(X_unalign_tensor, y_unalign_tensor)
+                    align_dataset = LocalDatasetSSLUnLabel(X_align_tensor, y_align_tensor)
+                    unalign_dataset = LocalDatasetSSLLabel(X_unalign_tensor, y_unalign_tensor)
                 else:
                     transform_train = transforms.Compose([
                         transforms.ToPILImage(),
@@ -422,7 +425,7 @@ class VerticalFLModel:
         for i in range(self.num_local_rounds):
             start_epoch = datetime.now()
             update_targets = ((i + 1) % self.update_target_freq == 0)
-            train_loss, train_loss_x, train_loss_u = self.train_ssl(data_loader_align, data_loader_unalign, model, optimizer, train_criterion, i, self.num_local_rounds, use_cuda)
+            train_loss, train_loss_x, train_loss_u = self.train_ssl(data_loader_unalign, data_loader_align, model, optimizer, train_criterion, i, self.num_local_rounds, use_cuda)
 
             total_loss = 0.0
             num_mini_batches = 0
@@ -442,9 +445,16 @@ class VerticalFLModel:
 
         model.train()
 
+        batch_time = AverageMeter()
+        data_time = AverageMeter()
         losses = AverageMeter()
         losses_x = AverageMeter()
         losses_u = AverageMeter()
+        ws = AverageMeter()
+        end = time.time()
+
+        bar = Bar('Training', max=train_iteration)
+
 
         for batch_idx in range(train_iteration):
             try:
@@ -462,6 +472,9 @@ class VerticalFLModel:
             except:
                 unlabeled_train_iter = iter(unlabeled_trainloader)
                 idx, (inputs_u, inputs_u2), _ = unlabeled_train_iter.next()
+
+            # measure data loading time
+            data_time.update(time.time() - end)
 
             batch_size = inputs_x.size(0)
 
@@ -520,11 +533,31 @@ class VerticalFLModel:
             losses.update(loss.item(), inputs_x.size(0))
             losses_x.update(Lx.item(), inputs_x.size(0))
             losses_u.update(Lu.item(), inputs_x.size(0))
+            ws.update(w, inputs_x.size(0))
 
             # compute gradient and do SGD step
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            # plot progress
+            bar.suffix  = '({batch}/{size}) Data: {data:.3f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Loss_x: {loss_x:.4f} | Loss_u: {loss_u:.4f} | W: {w:.4f}'.format(
+                        batch=batch_idx + 1,
+                        size=train_iteration,
+                        data=data_time.avg,
+                        bt=batch_time.avg,
+                        total=bar.elapsed_td,
+                        eta=bar.eta_td,
+                        loss=losses.avg,
+                        loss_x=losses_x.avg,
+                        loss_u=losses_u.avg,
+                        w=ws.avg,
+                        )
+            bar.next()
+        bar.finish()
 
         return (losses.avg, losses_x.avg, losses_u.avg,)
 
@@ -839,6 +872,14 @@ class VerticalFLModel:
             print("pred_labels[0]: ",pred_labels[0].shape)
             print("pred_labels[1]: ",pred_labels[1].shape)
             num_instances = num_instances - len(noise_index)
+
+        if ssl:
+            print("unalign index: ", unalign_index)
+            Xs = [x[unalign_index] for x in Xs]
+            y = y[unalign_index]
+            pred_labels = [x[unalign_index] for x in pred_labels]
+            pred_labels = np.array(pred_labels)
+            num_instances = len(unalign_index)
 
         # initialize agg model
         if self.task in ["binary_classification", "regression"]:

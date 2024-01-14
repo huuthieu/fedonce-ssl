@@ -688,7 +688,7 @@ class VerticalFLModel:
 
             assert is_perturbation(Z_copy, Z)
 
-    def train(self, Xs, y, Xs_test=None, y_test=None, use_cache=True, noise_index = [], ssl = False,
+    def train(self, Xs, y, Xs_test=None, y_test=None, use_cache=True, ssl = False,
              unalign_index = []):
         if use_cache and not os.path.isdir('cache'):
             os.mkdir('cache')
@@ -856,30 +856,16 @@ class VerticalFLModel:
 #         print("pred_labels[0]: ",pred_labels[0].shape)
 #         print("pred_labels[1]: ",pred_labels[1].shape)
         
-        # remove noise in data
-        if noise_index != []:
-            print("noise index: ", noise_index)
-            Xs = [self.remove_noise_index(x, noise_index) for x in Xs]
-            y = self.remove_noise_index(y, noise_index)
-            
-            print("pred_labels[0]: ",pred_labels[0].shape)
-            print("pred_labels[1]: ",pred_labels[1].shape)
-#             import pdb; pdb.set_trace()
-
-            pred_labels = [self.remove_noise_index(x, noise_index) for x in pred_labels]
-            pred_labels = np.array(pred_labels)
-            
-            print("pred_labels[0]: ",pred_labels[0].shape)
-            print("pred_labels[1]: ",pred_labels[1].shape)
-            num_instances = num_instances - len(noise_index)
-
         if ssl:
             print("unalign index: ", unalign_index)
-            Xs = [x[unalign_index] for x in Xs]
-            y = y[unalign_index]
-            pred_labels = [x[unalign_index] for x in pred_labels]
+            ## 
+            Xs = np.delete(Xs, unalign_index, axis=0)
+            y = np.delete(y, unalign_index, axis=0)
+
+            pred_labels = [np.delete(x, unalign_index, axis=0) for x in pred_labels]
             pred_labels = np.array(pred_labels)
-            num_instances = len(unalign_index)
+            
+            num_instances = len(Xs) - len(unalign_index)
 
         # initialize agg model
         if self.task in ["binary_classification", "regression"]:

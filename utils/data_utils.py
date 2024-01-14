@@ -642,6 +642,65 @@ def load_nus_wide(path, download=True, label_type='airport', use_cache=True, bal
 
     return result
 
+
+def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0):
+    df = pd.read_csv('dataset/default_of_credit_card_clients.csv', index_col='ID')
+    df.rename(columns={'default payment next month':'DEFAULT'}, inplace=True)
+    df.rename(columns={'PAY_0': 'PAY_1'}, inplace=True)
+    df.rename(columns=lambda x: x.upper(), inplace=True)
+    # remove useless and incorrect information
+    print(f"Dataset size before:\t{df.shape[0]}")
+    df = df.drop(df[df['MARRIAGE']==0].index)
+    df = df.drop(df[df['EDUCATION']==0].index)
+    df = df.drop(df[df['EDUCATION']==5].index)
+    df = df.drop(df[df['EDUCATION']==6].index)
+    print(f"Dataset size after:\t{df.shape[0]}")
+
+    df['GRAD_SCHOOL'] = (df['EDUCATION'] == 1).astype('float')
+    df['UNIVERSITY'] = (df['EDUCATION'] == 2).astype('float')
+    df['HIGH_SCHOOL'] = (df['EDUCATION'] == 3).astype('float')
+    df.drop('EDUCATION', axis=1, inplace=True)
+
+    df['MALE'] = (df['SEX'] == 1).astype('float')
+    df.drop('SEX', axis=1, inplace=True)
+
+    df['MARRIED'] = (df['MARRIAGE'] == 1).astype('category')
+    df.drop('MARRIAGE', axis=1, inplace=True)
+
+    y = df['DEFAULT']
+    X = df.drop('DEFAULT', axis=1, inplace=False)
+    X_train_raw, X_test_raw, y_train, y_test = train_test_split(X, y, test_size=test_rate, random_state=24, stratify=y)
+    scaler = StandardScaler()
+    X_train_std = X_train_raw.copy()
+    X_test_std = X_test_raw.copy()
+
+    X_train_std['LIMIT_BAL'] = scaler.fit_transform(X_train_raw['LIMIT_BAL'].values.reshape(-1, 1))
+    X_test_std['LIMIT_BAL'] = scaler.transform(X_test_raw['LIMIT_BAL'].values.reshape(-1, 1))
+    X_train_std['AGE'] = scaler.fit_transform(X_train_raw['AGE'].values.reshape(-1, 1))
+    X_test_std['AGE'] = scaler.transform(X_test_raw['AGE'].values.reshape(-1, 1))
+    for i in range(1,7):
+        X_train_std['PAY_' + str(i)] = scaler.fit_transform(X_train_raw['PAY_' + str(i)].values.reshape(-1, 1))
+        X_test_std['PAY_' + str(i)] = scaler.transform(X_test_raw['PAY_' + str(i)].values.reshape(-1, 1))
+        X_train_std['BILL_AMT' + str(i)] = scaler.fit_transform(X_train_raw['BILL_AMT' + str(i)].values.reshape(-1, 1))
+        X_test_std['BILL_AMT' + str(i)] = scaler.transform(X_test_raw['BILL_AMT' + str(i)].values.reshape(-1, 1))
+        X_train_std['PAY_AMT' + str(i)] = scaler.fit_transform(X_train_raw['PAY_AMT' + str(i)].values.reshape(-1, 1))
+        X_test_std['PAY_AMT' + str(i)] = scaler.transform(X_test_raw['PAY_AMT' + str(i)].values.reshape(-1, 1))
+
+
+    train_data = bias_vertical_split(X_train_std, 0.3)
+    test_data = bias_vertical_split(X_test_std, 0.3)
+    
+    if remove_ratio > 0:
+        train_data = rm_noise_list([*train_data], remove_ratio)
+        train_label = rm_noise(y_train, remove_ratio)
+
+    result = [train_data, train_label, test_data, y_test]
+    # np.save("cache/creditcardfraud.npy", result, allow_pickle=True)
+    
+    return result
+    
+
+
 def load_creditcardfraud(path,use_cache = True, test_rate=0.2, num_parties=2,
                          remove_ratio = 0.2):
     if use_cache:

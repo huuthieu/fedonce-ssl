@@ -645,7 +645,7 @@ def load_nus_wide(path, download=True, label_type='airport', use_cache=True, bal
 
 
 def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0):
-    df = pd.read_csv('dataset/default_of_credit_card_clients.csv', index_col='ID')
+    df = pd.read_csv('data/uci/default_of_credit_card_clients.csv', index_col='ID')
     df.rename(columns={'default payment next month':'DEFAULT'}, inplace=True)
     df.rename(columns={'PAY_0': 'PAY_1'}, inplace=True)
     df.rename(columns=lambda x: x.upper(), inplace=True)
@@ -688,14 +688,17 @@ def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0):
         X_test_std['PAY_AMT' + str(i)] = scaler.transform(X_test_raw['PAY_AMT' + str(i)].values.reshape(-1, 1))
 
 
-    train_data = bias_vertical_split(X_train_std, 0.3)
-    test_data = bias_vertical_split(X_test_std, 0.3)
+    x_train = bias_vertical_split(X_train_std.to_numpy(), 0.5)
+    x_test = bias_vertical_split(X_test_std.to_numpy(), 0.5)
     
-    if remove_ratio > 0:
-        train_data = rm_noise_list([*train_data], remove_ratio)
-        train_label = rm_noise(y_train, remove_ratio)
+    y_train = y_train.to_numpy()
+    y_test = y_test.to_numpy()
 
-    result = [train_data, train_label, test_data, y_test]
+    if remove_ratio > 0:
+        x_train = rm_noise_list([*x_train], remove_ratio)
+        y_train = rm_noise(y_train, remove_ratio)
+
+    result = [x_train, y_train, x_test, y_test]
     # np.save("cache/creditcardfraud.npy", result, allow_pickle=True)
     
     return result

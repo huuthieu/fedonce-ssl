@@ -857,7 +857,6 @@ class VerticalFLModel:
 #         print("pred_labels[1]: ",pred_labels[1].shape)
         
         if ssl:
-            import pdb; pdb.set_trace()
             print("unalign index: ", unalign_index)
             num_instances = Xs[0].shape[0] - len(unalign_index)
             ## 
@@ -965,7 +964,6 @@ class VerticalFLModel:
             passive_party_range = list(range(self.num_parties))
             passive_party_range.remove(self.active_party_id)
             print("passive_party_range:", passive_party_range)
-            import pdb; pdb.set_trace()
             Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
 
             self.train_aggregation(ep, Z, Xs[self.active_party_id], y, model_optimizer)

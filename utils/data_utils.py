@@ -26,6 +26,7 @@ from utils.utils import get_closest_factor
 
 from utils.exceptions import *
 
+from ucimlrepo import fetch_ucirepo 
 
 
 np.random.seed(10)
@@ -664,7 +665,7 @@ def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0):
     df['MALE'] = (df['SEX'] == 1).astype('float')
     df.drop('SEX', axis=1, inplace=True)
 
-    df['MARRIED'] = (df['MARRIAGE'] == 1).astype('category')
+    df['MARRIED'] = (df['MARRIAGE'] == 1).astype('float')
     df.drop('MARRIAGE', axis=1, inplace=True)
 
     y = df['DEFAULT']
@@ -761,7 +762,6 @@ def load_creditcardfraud(path,use_cache = True, test_rate=0.2, num_parties=2,
         # np.save("cache/creditcardfraud.npy", result, allow_pickle=True)
         
     return result
-
 
 def load_movielens(path, download=True, use_cache=True, test_rate=0.2, num_parties=2):
     if use_cache and os.path.isfile("cache/movielens.npy"):

@@ -458,20 +458,20 @@ class VerticalFLModel:
 
         for batch_idx in range(train_iteration):
             try:
-                data = labeled_train_iter.next()
+                data = next(labeled_train_iter)
                 idx, inputs_x, targets_x = data
             except:
                 labeled_train_iter = iter(labeled_trainloader)
-                data = labeled_train_iter.next()
+                data = next(labeled_train_iter)
                 idx, inputs_x, targets_x = data
             
             # import pdb; pdb.set_trace()
             
             try:
-                idx, (inputs_u, inputs_u2), _ = unlabeled_train_iter.next()
+                idx, (inputs_u, inputs_u2), _ = next(unlabeled_train_iter)
             except:
                 unlabeled_train_iter = iter(unlabeled_trainloader)
-                idx, (inputs_u, inputs_u2), _ = unlabeled_train_iter.next()
+                idx, (inputs_u, inputs_u2), _ = next(unlabeled_train_iter)
 
             # measure data loading time
             data_time.update(time.time() - end)
@@ -858,15 +858,14 @@ class VerticalFLModel:
         
         if ssl:
             print("unalign index: ", unalign_index)
+            num_instances = len(Xs) - len(unalign_index)
             ## 
-            Xs = np.delete(Xs, unalign_index, axis=0)
-            y = np.delete(y, unalign_index, axis=0)
+            Xs = [self.remove_noise_index(x, unalign_index) for x in Xs]
+            y = self.remove_noise_index(y, unalign_index)
 
-            pred_labels = [np.delete(x, unalign_index, axis=0) for x in pred_labels]
+            pred_labels = [self.remove_noise_index(x, unalign_index) for x in pred_labels]
             pred_labels = np.array(pred_labels)
             
-            num_instances = len(Xs) - len(unalign_index)
-
         # initialize agg model
         if self.task in ["binary_classification", "regression"]:
             num_features = Xs[self.active_party_id].shape[1]
@@ -965,7 +964,7 @@ class VerticalFLModel:
             passive_party_range = list(range(self.num_parties))
             passive_party_range.remove(self.active_party_id)
             print("passive_party_range:", passive_party_range)
-#             import pdb; pdb.set_trace()
+            print(pred_labels).shape
             Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
 
             self.train_aggregation(ep, Z, Xs[self.active_party_id], y, model_optimizer)

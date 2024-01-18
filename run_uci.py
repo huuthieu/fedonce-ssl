@@ -26,7 +26,7 @@ from sklearn.model_selection import KFold
 ## FedOnce
 def train_fedonce(remove_ratio = 0.1):
     num_parties = 2
-    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.1)
+    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.1, remove_ratio=remove_ratio)
     active_party = 0
     print("Active party {} starts training".format(active_party))
     score_list = []
@@ -76,7 +76,7 @@ def train_fedonce(remove_ratio = 0.1):
             epsilon=1,
             delta=1.0/xs_train[0].shape[0]
         )
-        acc, _, _, _  = aggregate_model.train(xs_train, y_train, xs_val, y_val, xs_test, y_test, use_cache=False)
+        acc, _, _, _  = aggregate_model.train(xs_train, y_train, xs_val, y_val)
         y_test_score = aggregate_model.predict_agg(xs_test)
         y_test_pred = np.where(y_test_score > 0.5, 1, 0)
         test_f1 = f1_score(y_test, y_test_pred)
@@ -89,12 +89,12 @@ def train_fedonce(remove_ratio = 0.1):
     print("F1 for active party {} with: {}".format(active_party, str(f1_summary)))
     mean = np.mean(score_list)
     std = np.std(score_list)
-    out = "Party {}: Accuracy mean={}, std={}".format(active_party, mean, std)
+    out = "Party {}, remove_ratio {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, mean, std)
     print(out)
 
     mean = np.mean(f1_summary)
     std = np.std(f1_summary)
-    out = "Party {}: Accuracy mean={}, std={}".format(active_party, mean, std)
+    out = "Party {}, remove_ratio {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, mean, std)
     print(out)
     return mean, std
 
@@ -169,12 +169,12 @@ def train_fedonce_ssl(remove_ratio = 0.1, ssl = True, unlign_ratio = 0.5):
     print("F1 for active party {} with: {}".format(active_party, str(f1_summary)))
     mean = np.mean(score_list)
     std = np.std(score_list)
-    out = "Party {}: Accuracy mean={}, std={}".format(active_party, mean, std)
+    out = "Party {}, unlign ratio {:.1f}: Accuracy mean={}, std={}".format(active_party, unlign_ratio, mean, std)
     print(out)
 
     mean = np.mean(f1_summary)
     std = np.std(f1_summary)
-    out = "Party {}: Accuracy mean={}, std={}".format(active_party, mean, std)
+    out = "Party {}, unlign ratio {:.1f}: F1 mean={}, std={}".format(active_party, unlign_ratio, mean, std)
     print(out)
     return mean, std
 
@@ -243,7 +243,25 @@ def train_combine(remove_ratio = 0.1):
         std = np.std(result)
         print("Party {}: F1-score mean={}, std={}".format(i, mean, std))
 
+def run_vertical_fl_all_ration():
+    ratios = np.arange(0.1, 0.9, 0.1)
+    results = Parallel(n_jobs=6)(delayed(train_fedonce)(remove_ratio = ratio) for ratio in ratios)
+    print("-------------------------------------------------")
+    for beta, (mean, std) in zip(ratios, results):
+        print("Party {}, beta {:.1f}: Accuracy mean={}, std={}".format(0, beta, mean, std))
+
+def run_vertical_fl_ssl_all_ration():
+    ratios = np.arange(0.1, 0.9, 0.1)
+    results = Parallel(n_jobs=6)(delayed(train_fedonce_ssl)(unlign_ratio = ratio) for ratio in ratios)
+    print("-------------------------------------------------")
+    for beta, (mean, std) in zip(ratios, results):
+        print("Party {}, beta {:.1f}: Accuracy mean={}, std={}".format(0, beta, mean, std))
+
+
 
 if __name__ == '__main__':
     # train_combine(remove_ratio=0.6)
-    train_fedonce_ssl(unlign_ratio = 0.9)
+    # train_fedonce_ssl(unlign_ratio = 0.9)
+    # run_vertical_fl_ssl_all_ration()
+    # run_vertical_fl_all_ration()
+    train_fedonce(remove_ratio = 0.9)

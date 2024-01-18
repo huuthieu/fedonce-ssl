@@ -373,7 +373,7 @@ class VerticalFLModel:
 
             assert is_perturbation(Z_copy, Z)
 
-    def train(self, Xs, y, Xs_test=None, y_test=None, use_cache=True, noise_index = []):
+    def train(self, Xs, y, Xs_test=None, y_test=None, use_cache=False, noise_index = []):
         if use_cache and not os.path.isdir('cache'):
             os.mkdir('cache')
         num_instances = Xs[0].shape[0]
@@ -491,6 +491,7 @@ class VerticalFLModel:
                                                          perturb_labels[party_id, :, :], local_model)
                     pred_labels[party_id, :, :] = self.predict_local(Xs[party_id], local_model)
 
+
                     if use_cache:
                         # save perturbed labels for each model
                         np.save(pred_label_path, pred_labels)
@@ -528,6 +529,7 @@ class VerticalFLModel:
         print("Adding noise {} to predicted labels".format(self.repr_noise))
         noise = np.random.normal(scale=self.repr_noise, size=pred_labels.shape)
         pred_labels += noise
+        # import pdb; pdb.set_trace()
         
 #         print("pred_labels[0]: ",pred_labels[0].shape)
 #         print("pred_labels[1]: ",pred_labels[1].shape)
@@ -540,7 +542,6 @@ class VerticalFLModel:
             
             print("pred_labels[0]: ",pred_labels[0].shape)
             print("pred_labels[1]: ",pred_labels[1].shape)
-#             import pdb; pdb.set_trace()
 
             pred_labels = [self.remove_noise_index(x, noise_index) for x in pred_labels]
             pred_labels = np.array(pred_labels)
@@ -647,7 +648,7 @@ class VerticalFLModel:
             passive_party_range = list(range(self.num_parties))
             passive_party_range.remove(self.active_party_id)
             print("passive_party_range:", passive_party_range)
-#             import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
             Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
 
             self.train_aggregation(ep, Z, Xs[self.active_party_id], y, model_optimizer)

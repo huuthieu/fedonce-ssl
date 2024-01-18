@@ -152,11 +152,7 @@ def get_random_noisy_row(x, ratio):
     return noisy_rows_indices
 
 def rm_noise(x, ratio = 0.95):
-    np.random.seed(0)
-    num_noisy_rows = int(ratio * x.shape[0])
-
-    # Chọn ngẫu nhiên các hàng để thêm nhiễu
-    noisy_rows_indices = np.random.choice(x.shape[0], num_noisy_rows, replace=False)
+    noisy_rows_indices = get_random_noisy_row(x, ratio)
 
     x = np.delete(x, noisy_rows_indices, axis=0)
 

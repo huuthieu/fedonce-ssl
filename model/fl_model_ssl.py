@@ -41,6 +41,16 @@ def interleave_offsets(batch, nu):
     assert offsets[-1] == batch
     return offsets
 
+def describe_sequential(model):
+    config = []
+    for i, layer in enumerate(model):
+        layer_config = {}
+        layer_config['index'] = i
+        layer_config['type'] = str(layer.__class__.__name__)
+        layer_config['params'] = layer.__dict__
+        config.append(layer_config)
+
+    return config
 
 def interleave(xy, batch):
     nu = len(xy) - 1
@@ -814,8 +824,9 @@ class VerticalFLModel:
                     if ssl:
                         local_model = self.train_local_party_ssl(0, party_id, Xs[party_id],
                                                          y, local_ssl_model, unalign_index)
+                        
                         ## remove last layer
-                        local_model = nn.Sequential(*list(local_model.children())[:-1])
+                        # local_model = nn.ModuleList(local_model.fc_layers[:-1])
                     else:
                         local_model = self.train_local_party(0, party_id, Xs[party_id],
                                                          perturb_labels[party_id, :, :], local_model)
@@ -1078,6 +1089,7 @@ class VerticalFLModel:
         with torch.no_grad():
             model = model.to(self.device)
             model.eval()
+            model.ssl = True
             for (X_i,) in dataloader:
                 X_i = X_i.to(self.device)
                 Z_i = model(X_i)

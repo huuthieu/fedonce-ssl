@@ -478,8 +478,11 @@ class VerticalFLModel:
 
             batch_size = inputs_x.size(0)
 
-            # Transform label to one-hot
-            targets_x = torch.zeros(batch_size, 10).scatter_(1, targets_x.view(-1,1).long(), 1)
+            # # Transform label to one-hot
+            # targets_x = torch.zeros(batch_size, 10).scatter_(1, targets_x.view(-1,1).long(), 1)
+
+            ## Convert from (n,) to (n,1)
+            targets_x = targets_x.view(-1,1).long()
 
             if use_cuda:
                 inputs_x, targets_x = inputs_x.cuda(), targets_x.cuda(non_blocking=True)
@@ -495,6 +498,8 @@ class VerticalFLModel:
                 pt = p**(1/0.5)
                 targets_u = pt / pt.sum(dim=1, keepdim=True)
                 targets_u = targets_u.detach()
+
+            # import pdb; pdb.set_trace()
 
             # mixup
             all_inputs = torch.cat([inputs_x, inputs_u, inputs_u2], dim=0)
@@ -688,7 +693,7 @@ class VerticalFLModel:
 
             assert is_perturbation(Z_copy, Z)
 
-    def train(self, Xs, y, Xs_test=None, y_test=None, use_cache=True, ssl = False,
+    def train(self, Xs, y, Xs_test=None, y_test=None, use_cache=False, ssl = False,
              unalign_index = []):
         if use_cache and not os.path.isdir('cache'):
             os.mkdir('cache')
@@ -808,10 +813,13 @@ class VerticalFLModel:
                 else:
                     if ssl:
                         local_model = self.train_local_party_ssl(0, party_id, Xs[party_id],
-                                                         y, local_model, unalign_index)
+                                                         y, local_ssl_model, unalign_index)
+                        ## remove last layer
+                        local_model = nn.Sequential(*list(local_model.children())[:-1])
                     else:
                         local_model = self.train_local_party(0, party_id, Xs[party_id],
                                                          perturb_labels[party_id, :, :], local_model)
+                    # import pdb; pdb.set_trace()
                     pred_labels[party_id, :, :] = self.predict_local(Xs[party_id], local_model)
 
                     if use_cache:
@@ -857,6 +865,8 @@ class VerticalFLModel:
 #         print("pred_labels[1]: ",pred_labels[1].shape)
         
         if ssl:
+            # import pdb; pdb.set_trace()
+
             print("unalign index: ", unalign_index)
             num_instances = Xs[0].shape[0] - len(unalign_index)
             ## 
@@ -964,6 +974,7 @@ class VerticalFLModel:
             passive_party_range = list(range(self.num_parties))
             passive_party_range.remove(self.active_party_id)
             print("passive_party_range:", passive_party_range)
+            # import pdb; pdb.set_trace()
             Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
 
             self.train_aggregation(ep, Z, Xs[self.active_party_id], y, model_optimizer)

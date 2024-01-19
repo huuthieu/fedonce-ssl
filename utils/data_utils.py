@@ -667,7 +667,8 @@ def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0):
     y = df['DEFAULT']
     X = df.drop('DEFAULT', axis=1, inplace=False)
     X_train_raw, X_test_raw, y_train, y_test = train_test_split(X, y, test_size=test_rate, random_state=24, stratify=y)
-    scaler = StandardScaler()
+    # scaler = StandardScaler()
+    scaler = MinMaxScaler()
     X_train_std = X_train_raw.copy()
     X_test_std = X_test_raw.copy()
 

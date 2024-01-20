@@ -80,7 +80,18 @@ def origin_log():
     sorted_dict = dict(sorted(f1_dict.items()))
     print("fed f1: ", sorted_dict)
     print("combine f1: ", "0.9481608219329713")
+    
+def uci_log():
+        
+    with open(args.input_file) as f:
+        data = f.read().splitlines()
+    
+    pattern = re.compile(r".*F1 mean=\d+(\.\d+)?,.*$")
 
+    for text in data:
+        if pattern.match(text):
+            print(text)
 if __name__ == "__main__": 
-    origin_log()
+#     origin_log()
 #     own_log()
+    uci_log()

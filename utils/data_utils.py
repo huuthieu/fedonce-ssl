@@ -683,10 +683,12 @@ def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0):
         X_test_std['BILL_AMT' + str(i)] = scaler.transform(X_test_raw['BILL_AMT' + str(i)].values.reshape(-1, 1))
         X_train_std['PAY_AMT' + str(i)] = scaler.fit_transform(X_train_raw['PAY_AMT' + str(i)].values.reshape(-1, 1))
         X_test_std['PAY_AMT' + str(i)] = scaler.transform(X_test_raw['PAY_AMT' + str(i)].values.reshape(-1, 1))
+    
+    X_train_std = X_train_std.to_numpy()[..., :12]
+    X_test_std = X_test_std.to_numpy()[..., :12]
 
-
-    x_train = bias_vertical_split(X_train_std.to_numpy(), 0.5)
-    x_test = bias_vertical_split(X_test_std.to_numpy(), 0.5)
+    x_train = bias_vertical_split(X_train_std, 0.5)
+    x_test = bias_vertical_split(X_test_std, 0.5)
     
     y_train = y_train.to_numpy()
     y_test = y_test.to_numpy()
@@ -757,7 +759,7 @@ def load_creditcardfraud(path,use_cache = True, test_rate=0.2, num_parties=2,
         if remove_ratio > 0:
             train_data = rm_noise_list([*train_data], remove_ratio)
             train_label = rm_noise(train_label, remove_ratio)
-
+        
         result = [train_data, train_label, test_data, test_label]
         # np.save("cache/creditcardfraud.npy", result, allow_pickle=True)
         

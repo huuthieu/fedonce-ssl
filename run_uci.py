@@ -26,8 +26,8 @@ from sklearn.model_selection import KFold
 ## FedOnce
 def train_fedonce(remove_ratio = 0.1):
     num_parties = 2
-    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.1, remove_ratio=remove_ratio)
-    active_party = 0
+    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio)
+    active_party = 1
     print("Active party {} starts training".format(active_party))
     score_list = []
     f1_summary = []
@@ -85,8 +85,10 @@ def train_fedonce(remove_ratio = 0.1):
         score_list.append(acc)
         f1_summary.append(test_f1)
         print(aggregate_model.params)
+    
     print("Accuracy for active party {}".format(active_party) + str(score_list))
     print("F1 for active party {} with: {}".format(active_party, str(f1_summary)))
+    
     mean = np.mean(score_list)
     std = np.std(score_list)
     out = "Party {}, remove_ratio {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, mean, std)
@@ -101,9 +103,9 @@ def train_fedonce(remove_ratio = 0.1):
 def train_fedonce_ssl(remove_ratio = 0.1, ssl = True, unlign_ratio = 0.5):
 
     num_parties = 2
-    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.1)
+    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2)
 
-    active_party = 0
+    active_party = 1
     print("Active party {} starts training".format(active_party))
     score_list = []
     f1_summary = []
@@ -122,7 +124,7 @@ def train_fedonce_ssl(remove_ratio = 0.1, ssl = True, unlign_ratio = 0.5):
         writer = SummaryWriter("runs/{}".format(name))
 
         if ssl:
-            unalign_index = get_random_noisy_row(xs_train[0], unlign_ratio)       
+            unalign_index = get_random_noisy_row(xs_train[active_party], unlign_ratio)       
 
         aggregate_model = VerticalFLModelSSL(
             num_parties=num_parties,
@@ -165,6 +167,7 @@ def train_fedonce_ssl(remove_ratio = 0.1, ssl = True, unlign_ratio = 0.5):
         score_list.append(acc)
         f1_summary.append(test_f1)
         print(aggregate_model.params)
+
     print("Accuracy for active party {}".format(active_party) + str(score_list))
     print("F1 for active party {} with: {}".format(active_party, str(f1_summary)))
     mean = np.mean(score_list)
@@ -182,17 +185,17 @@ def train_fedonce_ssl(remove_ratio = 0.1, ssl = True, unlign_ratio = 0.5):
 # combine
 def train_combine(remove_ratio = 0.1):
     num_parties = 2
-    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.1)
+    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio)
 
     active_party = 0
     print("Active party {} starts training".format(active_party))
-    score_list = []
-    f1_summary = []
     x_train_val = np.concatenate(xs_train_val, axis=1)
+    # x_train_val = xs_train_val[active_party][...,6:]
     print("x_train_val shape: {}".format(x_train_val.shape))
     print("ratio of positive samples: {}".format(np.sum(y_train_val) / len(y_train_val)))
 
     x_test = np.concatenate(xs_test, axis=1)
+    # x_test = xs_test[active_party][...,6:]
     print("x_test shape: {}".format(x_test.shape))
     print("ratio of positive samples: {}".format(np.sum(y_test) / len(y_test)))
 
@@ -227,9 +230,12 @@ def train_combine(remove_ratio = 0.1):
             optimizer='adam',
             cuda_parallel=False
         )
-        acc, f1, _,_ = single_model.train(x_train, y_train, x_test, y_test)
+        acc, _, _,_ = single_model.train(x_train, y_train, x_val, y_val)
+        _, y_test_score = single_model.predict(x_test)
+        y_test_pred = np.where(y_test_score > 0.5, 1, 0)
+        test_f1 = f1_score(y_test, y_test_pred)
         acc_summary.append(acc)
-        f1_summary.append(f1)
+        f1_summary.append(test_f1)
         print(single_model.params)
 
     print("Accuracy summary: " + repr(acc_summary))
@@ -237,31 +243,25 @@ def train_combine(remove_ratio = 0.1):
     for i, result in enumerate(acc_summary):
         mean = np.mean(result)
         std = np.std(result)
-        print("Party {}: Accuracy mean={}, std={}".format(i, mean, std))
+    print("Accuracy mean={}, std={}".format(mean, std))
     for i, result in enumerate(f1_summary):
         mean = np.mean(result)
         std = np.std(result)
-        print("Party {}: F1-score mean={}, std={}".format(i, mean, std))
+    print("F1-score mean={}, std={}".format(mean, std))
 
 def run_vertical_fl_all_ration():
-    ratios = np.arange(0.1, 0.9, 0.1)
-    results = Parallel(n_jobs=6)(delayed(train_fedonce)(remove_ratio = ratio) for ratio in ratios)
-    print("-------------------------------------------------")
-    for beta, (mean, std) in zip(ratios, results):
-        print("Party {}, beta {:.1f}: Accuracy mean={}, std={}".format(0, beta, mean, std))
+    ratios = np.arange(0.0, 1.0, 0.1)
+    Parallel(n_jobs=6)(delayed(train_fedonce)(remove_ratio = ratio) for ratio in ratios)
 
 def run_vertical_fl_ssl_all_ration():
-    ratios = np.arange(0.1, 0.9, 0.1)
-    results = Parallel(n_jobs=6)(delayed(train_fedonce_ssl)(unlign_ratio = ratio) for ratio in ratios)
-    print("-------------------------------------------------")
-    for beta, (mean, std) in zip(ratios, results):
-        print("Party {}, beta {:.1f}: Accuracy mean={}, std={}".format(0, beta, mean, std))
+    ratios = np.arange(0.8, 1.0, 0.1)
+    Parallel(n_jobs=6)(delayed(train_fedonce_ssl)(unlign_ratio = ratio) for ratio in ratios)
 
 
 
 if __name__ == '__main__':
-    # train_combine(remove_ratio=0.6)
-    # train_fedonce_ssl(unlign_ratio = 0.9)
-    # run_vertical_fl_ssl_all_ration()
+    # train_combine(remove_ratio=0.8)
+    # train_fedonce_ssl(unlign_ratio = 0.1)
+    run_vertical_fl_ssl_all_ration()
     # run_vertical_fl_all_ration()
-    train_fedonce(remove_ratio = 0.9)
+    # train_fedonce(remove_ratio = 0.9)

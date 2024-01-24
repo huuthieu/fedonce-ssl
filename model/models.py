@@ -133,6 +133,7 @@ class FC(nn.Module):
                 self.fc_layers.append(nn.Linear(hidden_sizes[i], hidden_sizes[i+1]))
         self.fc_layers.append(nn.Linear(hidden_sizes[-1], output_size))
         self.ssl = False
+        self.feature = False
 
     def forward(self, X):
         if len(list(self.fc_layers)) == 0:
@@ -141,7 +142,7 @@ class FC(nn.Module):
         out = F.relu(self.fc_layers[0](X))
         for fc in self.fc_layers[1:-1]:
             out = F.relu(fc(out))
-        if self.ssl:
+        if self.ssl or self.feature:
             return out
         if self.activation == 'sigmoid':
             out = torch.sigmoid(self.fc_layers[-1](out))

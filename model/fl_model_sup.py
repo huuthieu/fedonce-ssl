@@ -168,7 +168,7 @@ class VerticalFLModel:
             raise UnsupportedTaskError
 
         
-        align_data_loader = DataLoader(align_dataset, batch_size=self.local_batch_size, shuffle=True,
+        unalign_data_loader = DataLoader(unalign_dataset, batch_size=self.local_batch_size, shuffle=True,
                                  drop_last=True, num_workers=self.num_workers,
                                  multiprocessing_context='fork' if self.num_workers > 0 else None)
         
@@ -213,7 +213,7 @@ class VerticalFLModel:
         num_mini_batches = 0
         for i in range(self.num_local_rounds):
             start_epoch = datetime.now()
-            for j, (idx, X_i, y_i) in enumerate(align_data_loader, 0):
+            for j, (idx, X_i, y_i) in enumerate(unalign_data_loader, 0):
                 X_i = X_i.to(self.device)
                 y_i = y_i.to(self.device)
 
@@ -259,9 +259,9 @@ class VerticalFLModel:
             epoch_duration_sec = (datetime.now() - start_epoch).seconds
             print("Epoch {} duration {} sec".format(i + 1, epoch_duration_sec), flush=True)
 
-        pseudo_labels = self.predict_local(X_unalign_tensor.cpu().numpy(), model)
-        X_combined = np.vstack([X_align_tensor, X_unalign_tensor])
-        y_combined = np.hstack([y_align_tensor, pseudo_labels.flatten()])
+        pseudo_labels = self.predict_local(X_align_tensor.cpu().numpy(), model)
+        X_combined = np.vstack([X_unalign_tensor, X_align_tensor])
+        y_combined = np.hstack([y_unalign_tensor, pseudo_labels.flatten()])
         if self.task in ["binary_classification", "regression"]:
             y_combined_tensor = torch.from_numpy(y_combined).float()
         elif self.task in ["multi_classification"]:
@@ -627,6 +627,10 @@ class VerticalFLModel:
 
             pred_labels = [self.remove_noise_index(x, unalign_index) for x in pred_labels]
             pred_labels = np.array(pred_labels)
+            print("After remove unalign index: ")
+            print("Xs[0]: ", Xs[0].shape)
+            print("pred_labels[0]: ",pred_labels[0].shape)
+
 
         # initialize agg model
         if self.task in ["binary_classification", "regression"]:

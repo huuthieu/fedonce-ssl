@@ -2,12 +2,16 @@ import re
 from collections import defaultdict
 import argparse
 import numpy as np
+import os
+from os import listdir
+from os.path import isfile, join
 
 # Create an argument parser
 parser = argparse.ArgumentParser(description="Process log file and extract F1 scores.")
 
 # Add a required argument for the input file
 parser.add_argument("--input_file", help="Path to the log file")
+parser.add_argument("--input_folder", help="Path to the input folder")
 
 # Parse the command-line arguments
 args = parser.parse_args()
@@ -91,7 +95,32 @@ def uci_log():
     for text in data:
         if pattern.match(text):
             print(text)
+
+def plot_ucilog():
+
+    result = {}
+    ## get full path of all files in the folder
+    mypath = args.input_folder
+    onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
+    print(onlyfiles)
+
+    for file in onlyfiles:
+        result_file = {}
+        with open(mypath + "/" + file) as f:
+            data = f.read().splitlines()
+        pattern = re.compile(r".*F1 mean=\d+(\.\d+)?,.*$")
+        for text in data:
+            if pattern.match(text):
+                ## get the final float number before the colon as the key
+                key = re.findall(r"(\d+\.\d+)[,:]", text)[0]
+                value = re.findall(r"mean=([0-9]+\.[0-9]+)", text)[0]
+                result_file[key] = value
+        result[file.split(".")[0]] = result_file
+    print(result)
+
+
 if __name__ == "__main__": 
 #     origin_log()
 #     own_log()
-    uci_log()
+    # uci_log()
+    plot_ucilog()

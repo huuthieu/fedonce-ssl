@@ -210,7 +210,7 @@ def train_fedonce_sup(unlign_ratio = 0.1):
             active_party_id=active_party,
             name=model_name,
             num_epochs=100,
-            num_local_rounds=100,
+            num_local_rounds=50,
             local_lr=3e-4,
             local_hidden_layers=[50, 30],
             local_batch_size=100,
@@ -263,18 +263,18 @@ def train_fedonce_sup(unlign_ratio = 0.1):
 
 # combine
 def train_combine(remove_ratio = 0.1):
-    num_parties = 2
+    num_parties = 1
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio)
 
-    active_party = 0
+    active_party = 1
     print("Active party {} starts training".format(active_party))
-    # x_train_val = np.concatenate(xs_train_val, axis=1)
-    x_train_val = xs_train_val[active_party]
+    x_train_val = np.concatenate(xs_train_val, axis=1)
+    # x_train_val = xs_train_val[active_party]
     print("x_train_val shape: {}".format(x_train_val.shape))
     print("ratio of positive samples: {}".format(np.sum(y_train_val) / len(y_train_val)))
 
-    # x_test = np.concatenate(xs_test, axis=1)
-    x_test = xs_test[active_party]
+    x_test = np.concatenate(xs_test, axis=1)
+    # x_test = xs_test[active_party]
     print("x_test shape: {}".format(x_test.shape))
     print("ratio of positive samples: {}".format(np.sum(y_test) / len(y_test)))
 
@@ -350,6 +350,6 @@ if __name__ == '__main__':
     # run_vertical_fl_ssl_all_ration()
     # run_vertical_fl_all_ration()
     # train_fedonce(remove_ratio = 0.9)
-    # run_combine_all_ration()
+    # run_combine_all_ration()    
     # train_fedonce_sup(unlign_ratio = 0.9)
     run_vertical_fl_sup_all_ration()

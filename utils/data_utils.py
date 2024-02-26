@@ -640,7 +640,7 @@ def load_nus_wide(path, download=True, label_type='airport', use_cache=True, bal
     return result
 
 
-def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0):
+def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0, feature_order = None):
     df = pd.read_csv('data/uci/default_of_credit_card_clients.csv', index_col='ID')
     df.rename(columns={'default payment next month':'DEFAULT'}, inplace=True)
     df.rename(columns={'PAY_0': 'PAY_1'}, inplace=True)
@@ -684,8 +684,16 @@ def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0):
         X_train_std['PAY_AMT' + str(i)] = scaler.fit_transform(X_train_raw['PAY_AMT' + str(i)].values.reshape(-1, 1))
         X_test_std['PAY_AMT' + str(i)] = scaler.transform(X_test_raw['PAY_AMT' + str(i)].values.reshape(-1, 1))
     
-    X_train_std = X_train_std.to_numpy()[..., :12]
-    X_test_std = X_test_std.to_numpy()[..., :12]
+    # X_train_std = X_train_std.to_numpy()[..., :12]
+    # X_test_std = X_test_std.to_numpy()[..., :12]
+
+    X_train_std = X_train_std.to_numpy()
+    X_test_std = X_test_std.to_numpy()
+
+    if feature_order is not None:
+        assert feature_order.size == X_train_std.shape[1], "Feature orders mismatch the number of features"
+        X_train_std = X_train_std[:, feature_order]
+        X_test_std = X_test_std[:, feature_order]
 
     x_train = bias_vertical_split(X_train_std, 0.5)
     x_test = bias_vertical_split(X_test_std, 0.5)
@@ -702,7 +710,6 @@ def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0):
     
     return result
     
-
 
 def load_creditcardfraud(path,use_cache = True, test_rate=0.2, num_parties=2,
                          remove_ratio = 0.2):

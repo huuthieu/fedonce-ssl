@@ -24,10 +24,39 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import KFold
 
 
+# load data
+xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2)
+
+x_train_val = np.concatenate(xs_train_val, axis=1)
+
+x_test = np.concatenate(xs_test, axis=1)
+
+# calculate XGBoost feature importance
+print("Starts training XGBoost on phishing")
+xg_cls = xgb.XGBClassifier(objective='binary:logistic',
+                           learning_rate=0.1,
+                           max_depth=6,
+                           n_estimators=100,
+                           reg_alpha=10,
+                           verbosity=2)
+
+xg_cls.fit(x_train_val, y_train_val, eval_set=[(x_train_val, y_train_val), (x_test, y_test)], eval_metric='error')
+y_pred = xg_cls.predict(x_test)
+acc = accuracy_score(y_test, y_pred)
+importance = xg_cls.feature_importances_
+print("Finished training. Overall accuracy {}".format(acc))
+
+# save feature importance
+np.savetxt("cache/feature_importance_phishing.txt", importance)
+
+# load importance from file
+importance = np.loadtxt("cache/feature_importance_phishing.txt")
+
+
 ## FedOnce
 def train_fedonce(remove_ratio = 0.1):
     num_parties = 2
-    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio)
+    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=np.argsort(importance))
     active_party = 1
     print("Active party {} starts training".format(active_party))
     score_list = []
@@ -185,7 +214,7 @@ def train_fedonce_ssl(remove_ratio = 0.1, ssl = True, unlign_ratio = 0.5):
 def train_fedonce_sup(unlign_ratio = 0.1):
     num_parties = 2
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2)
-    active_party = 1
+    active_party = 0
     print("Active party {} starts training".format(active_party))
     score_list = []
     f1_summary = []
@@ -345,11 +374,11 @@ def run_combine_all_ration():
     Parallel(n_jobs=6)(delayed(train_combine)(remove_ratio = ratio) for ratio in ratios)
 
 if __name__ == '__main__':
-    # train_combine(remove_ratio=0.5)
+    train_combine(remove_ratio=0)
     # train_fedonce_ssl(unlign_ratio = 0.1)
     # run_vertical_fl_ssl_all_ration()
     # run_vertical_fl_all_ration()
-    # train_fedonce(remove_ratio = 0.9)
+#     train_fedonce(remove_ratio = 0)
     # run_combine_all_ration()    
     # train_fedonce_sup(unlign_ratio = 0.9)
-    run_vertical_fl_sup_all_ration()
+#     run_vertical_fl_sup_all_ration()

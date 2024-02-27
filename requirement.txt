@@ -24,3 +24,4 @@ rsa==4.8
 torch_optimizer
 wget
 progress
+ucimlrepo

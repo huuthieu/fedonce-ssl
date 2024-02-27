@@ -25,41 +25,55 @@ fedonce_ssl = {
 }
 
 combine_all = {
-    0.7: 0.42511580030880086,
-    0.6: 0.45603576751117736,
-    0.5: 0.4637254901960784,
-    0.9: 0.3122119815668203,
-    0.8: 0.3959336543606206,
-    0.4: 0.4751908396946565,
-    0.3: 0.474088291746641,
-    0.2: 0.47018904507998066
+    0.6: 0.45986124876114964,
+    0.5: 0.44388270980788674,
+    0.4: 0.4664380205781479,
+    0.3: 0.47701983551040156,
+    0.7: 0.4025423728813559,
+    0.8: 0.37688984881209503,
+    0.9: 0.2962962962962963,
+    0.2: 0.47179990191270227,
 }
 
 fedonce_sup = {
-    0.7: 0.4857435387092746,
-    0.6: 0.481816099208107,
-    0.5: 0.4828667393203053,
-    0.4: 0.4818953650921777,
-    0.3: 0.4802574847612725,
-    0.2: 0.4784672738327499,
-    0.9: 0.3126427491508312,
-    0.8: 0.467212890522022
+    0.9: 0.32117339948604295,
+    0.8: 0.4622255233729701,
+    0.6: 0.47724540018621775,
+    0.5: 0.48163227280668464,
+    0.4: 0.4796971867996591,
+    0.3: 0.4795950667500429,
+    0.7: 0.4750598591822837,
+    0.2: 0.47873798006005186
+}
+
+fedonce_sup_0_5 = {
+  0.7: 0.46684008524541476,
+  0.6: 0.4807049911583755,
+  0.5: 0.4801996859903797,
+  0.4: 0.48016669741650225,
+  0.3: 0.47952111728809843,
+  0.2: 0.46409021298530273,
+  0.9: 0.2995529788100302,
+  0.8: 0.43166612532206183
 }
 
 fedonce = sorted(fedonce.items(), key=lambda x: x[0], reverse=True)
 fedonce_ssl = sorted(fedonce_ssl.items(), key=lambda x: x[0], reverse=True)
 combine_all = sorted(combine_all.items(), key=lambda x: x[0], reverse=True)
 fedonce_sup = sorted(fedonce_sup.items(), key=lambda x: x[0], reverse=True)
+fedonce_sup_0_5 = sorted(fedonce_sup_0_5.items(), key=lambda x: x[0], reverse=True)
 
 ratios_fedonce, f1_means_fedonce = zip(*fedonce)
 ratios_fedoncessl, f1_means_fedoncessl = zip(*fedonce_ssl)
 ratios_combine_all, f1_means_combine_all = zip(*combine_all)
 ratios_fedonce_sup, f1_means_fedonce_sup = zip(*fedonce_sup)
+ratios_fedonce_sup_0_5, f1_means_fedonce_sup_0_5 = zip(*fedonce_sup_0_5)
 
 plt.plot(ratios_fedonce, f1_means_fedonce, marker='o', linestyle='-', label='Fedonce')
 plt.plot(ratios_fedoncessl, f1_means_fedoncessl, marker='o', linestyle='-', label='FedonceSSL')
 plt.plot(ratios_combine_all, f1_means_combine_all, marker='o', linestyle='-', label='Combine')
 plt.plot(ratios_fedonce_sup, f1_means_fedonce_sup, marker='o', linestyle='-', label='FedonceSup')
+plt.plot(ratios_fedonce_sup_0_5, f1_means_fedonce_sup_0_5, marker='o', linestyle='-', label='FedonceSupHalf')
 
 # Thiết lập các thuộc tính của biểu đồ
 plt.xlabel('Ratio (Descending)')

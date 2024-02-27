@@ -5,6 +5,7 @@ import numpy as np
 import os
 from os import listdir
 from os.path import isfile, join
+import matplotlib.pyplot as plt
 
 # Create an argument parser
 parser = argparse.ArgumentParser(description="Process log file and extract F1 scores.")
@@ -114,13 +115,28 @@ def plot_ucilog():
                 ## get the final float number before the colon as the key
                 key = re.findall(r"(\d+\.\d+)[,:]", text)[0]
                 value = re.findall(r"mean=([0-9]+\.[0-9]+)", text)[0]
-                result_file[key] = value
+                result_file[float(key)] = float(value)
         result[file.split(".")[0]] = result_file
     print(result)
+    plot(result)
 
+def plot(overall_result):
+    for key, value in overall_result.items():
+        dict = sorted(value.items(), key=lambda x: x[0], reverse=True)
+        ratios, f1_means = zip(*dict)
+        plt.plot(ratios, f1_means, marker='o', linestyle='-', label=key)
+        # Thiết lập các thuộc tính của biểu đồ
+        plt.xlabel('Ratio (Descending)')
+        plt.ylabel('F1 Mean')
+        plt.title('Comparison of F1 Mean - Descending Ratios')
+        plt.legend()
+        plt.grid(True)
+
+    # Hiển thị biểu đồ
+    plt.savefig('comparison_chart.png')
 
 if __name__ == "__main__": 
 #     origin_log()
 #     own_log()
-    # uci_log()
-    plot_ucilog()
+    uci_log()
+#     plot_ucilog()

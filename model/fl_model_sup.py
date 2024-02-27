@@ -296,7 +296,7 @@ class VerticalFLModel:
                 total_loss += loss.item()
                 loss.backward()
 
-                if self.privacy == 'MA' and ((j + 1) % self.batches_per_lot != 0) and (j + 1 < len(data_loader)):
+                if self.privacy == 'MA' and ((j + 1) % self.batches_per_lot != 0) and (j + 1 < len(data_loader_combined)):
                     optimizer.virtual_step()
                 else:
                     optimizer.step()
@@ -452,7 +452,8 @@ class VerticalFLModel:
                                        total_loss / num_mini_batches, ep * self.num_agg_rounds + i + 1)
             total_loss = 0.0
             num_mini_batches = 0
-
+            print("Z.shape: ", Z.shape)
+            print("Z_copy.shape: ", Z_copy.shape)
             assert is_perturbation(Z_copy, Z)
 
     def train(self, Xs, y, Xs_test=None, y_test=None, use_cache=False, unalign_index = []):

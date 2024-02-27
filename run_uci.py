@@ -57,9 +57,10 @@ else:
 
 
 ## FedOnce
-def train_fedonce(remove_ratio = 0.1, active_party = 1):
+def train_fedonce(remove_ratio = 0.1, active_party = 1, beta = 0.5):
     num_parties = 2
-    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=np.argsort(importance))
+    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=np.argsort(importance),
+                                                          feature_ratio_beta = beta)
     print("Active party {} starts training".format(active_party))
     score_list = []
     f1_summary = []
@@ -123,12 +124,12 @@ def train_fedonce(remove_ratio = 0.1, active_party = 1):
     
     mean = np.mean(score_list)
     std = np.std(score_list)
-    out = "Party {}, remove_ratio {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, mean, std)
     print(out)
 
     mean = np.mean(f1_summary)
     std = np.std(f1_summary)
-    out = "Party {}, remove_ratio {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, mean, std)
     print(out)
     return mean, std
 
@@ -359,9 +360,13 @@ def train_combine(remove_ratio = 0.1):
         std = np.std(result)
     print("remove_ratio {:.1f}, F1 mean={}, std={}".format(remove_ratio, mean, std))
 
-def run_vertical_fl_all_ration():
+def run_vertical_fl_remove_all_ration():
     ratios = np.arange(0.2, 1.0, 0.1)
     Parallel(n_jobs=6)(delayed(train_fedonce)(remove_ratio = ratio) for ratio in ratios)
+
+def run_vertical_fl_split_all_ration():
+    betas = np.arange(0.2, 0.8, 0.1)
+    Parallel(n_jobs=6)(delayed(train_fedonce)(beta = beta) for beta in betas)
 
 def run_vertical_fl_ssl_all_ration():
     ratios = np.arange(0.2, 1.0, 0.1)

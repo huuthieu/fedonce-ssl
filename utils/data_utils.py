@@ -640,7 +640,7 @@ def load_nus_wide(path, download=True, label_type='airport', use_cache=True, bal
     return result
 
 
-def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0, feature_order = None):
+def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0, feature_order = None, feature_ratio_beta = None):
     df = pd.read_csv('data/uci/default_of_credit_card_clients.csv', index_col='ID')
     df.rename(columns={'default payment next month':'DEFAULT'}, inplace=True)
     df.rename(columns={'PAY_0': 'PAY_1'}, inplace=True)
@@ -695,8 +695,13 @@ def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0, feature_order =
         X_train_std = X_train_std[:, feature_order]
         X_test_std = X_test_std[:, feature_order]
 
-    x_train = bias_vertical_split(X_train_std, 0.5)
-    x_test = bias_vertical_split(X_test_std, 0.5)
+    if feature_ratio_beta is not None:
+        assert num_parties == 2
+        X_train_std = bias_vertical_split(X_train_std, feature_ratio_beta)
+        X_test_std = bias_vertical_split(X_test_std, feature_ratio_beta)
+    else:
+        x_train = bias_vertical_split(X_train_std, 0.5)
+        x_test = bias_vertical_split(X_test_std, 0.5)
     
     y_train = y_train.to_numpy()
     y_test = y_test.to_numpy()

@@ -57,10 +57,10 @@ else:
 
 
 ## FedOnce
-def train_fedonce(remove_ratio = 0.1, active_party = 1, beta = 0.5):
+def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 0):
     num_parties = 2
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=np.argsort(importance),
-                                                          feature_ratio_beta = beta)
+                                                          feature_ratio_beta = beta, noise_ratio = noise_ratio)
     print("Active party {} starts training".format(active_party))
     score_list = []
     f1_summary = []
@@ -124,12 +124,12 @@ def train_fedonce(remove_ratio = 0.1, active_party = 1, beta = 0.5):
     
     mean = np.mean(score_list)
     std = np.std(score_list)
-    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}, noise_ratio {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, mean, std)
     print(out)
 
     mean = np.mean(f1_summary)
     std = np.std(f1_summary)
-    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, mean, std)
     print(out)
     return mean, std
 
@@ -368,6 +368,10 @@ def run_vertical_fl_split_all_ration():
     betas = np.arange(0.2, 0.8, 0.1)
     Parallel(n_jobs=6)(delayed(train_fedonce)(beta = beta) for beta in betas)
 
+def run_vertical_fl_noise_all_ration():
+    ratios = np.arange(0.1, 1.0, 0.1)
+    Parallel(n_jobs=6)(delayed(train_fedonce)(noise_ratio = ratio) for ratio in ratios)
+
 def run_vertical_fl_ssl_all_ration():
     ratios = np.arange(0.2, 1.0, 0.1)
     Parallel(n_jobs=6)(delayed(train_fedonce_ssl)(unlign_ratio = ratio) for ratio in ratios)
@@ -385,7 +389,9 @@ if __name__ == '__main__':
     # train_fedonce_ssl(unlign_ratio = 0.1)
     # run_vertical_fl_ssl_all_ration()
     # run_vertical_fl_all_ration()
-    train_fedonce(remove_ratio = 0, active_party= 1)
+    # run_vertical_fl_split_all_ration()
+    run_vertical_fl_noise_all_ration()
+    # train_fedonce(remove_ratio = 0, active_party= 1)
     # run_combine_all_ration()    
     # train_fedonce_sup(unlign_ratio = 0.9)
 #     run_vertical_fl_sup_all_ration()

@@ -294,21 +294,31 @@ def train_fedonce_sup(unlign_ratio = 0.1):
     return mean, std
 
 # combine
-def train_combine(remove_ratio = 0.1):
-    num_parties = 1
+def train_combine(remove_ratio = 0.1, active_party = -1):
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio)
 
-    active_party = 1
-    print("Active party {} starts training".format(active_party))
-    x_train_val = np.concatenate(xs_train_val, axis=1)
-    # x_train_val = xs_train_val[active_party]
-    print("x_train_val shape: {}".format(x_train_val.shape))
-    print("ratio of positive samples: {}".format(np.sum(y_train_val) / len(y_train_val)))
+    if active_party == -1:
+    
+        print("Active party {} starts training".format(active_party))
+        x_train_val = np.concatenate(xs_train_val, axis=1)
+        # x_train_val = xs_train_val[active_party]
+        print("x_train_val shape: {}".format(x_train_val.shape))
+        print("ratio of positive samples: {}".format(np.sum(y_train_val) / len(y_train_val)))
 
-    x_test = np.concatenate(xs_test, axis=1)
-    # x_test = xs_test[active_party]
-    print("x_test shape: {}".format(x_test.shape))
-    print("ratio of positive samples: {}".format(np.sum(y_test) / len(y_test)))
+        x_test = np.concatenate(xs_test, axis=1)
+        # x_test = xs_test[active_party]
+        print("x_test shape: {}".format(x_test.shape))
+        print("ratio of positive samples: {}".format(np.sum(y_test) / len(y_test)))
+    else:
+        print("Active party {} starts training".format(active_party))
+        x_train_val = xs_train_val[active_party]
+        print("x_train_val shape: {}".format(x_train_val.shape))
+        print("ratio of positive samples: {}".format(np.sum(y_train_val) / len(y_train_val)))
+
+        x_test = xs_test[active_party]
+        print("x_test shape: {}".format(x_test.shape))
+        print("ratio of positive samples: {}".format(np.sum(y_test) / len(y_test)))
+
 
 
     kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)

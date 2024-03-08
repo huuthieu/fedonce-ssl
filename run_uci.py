@@ -8,8 +8,9 @@ from model.models import FC
 
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.inspection import permutation_importance
-from sklearn.feature_selection import SelectFromModel
-import joblib 
+from sklearn.feature_selection import SelectFromModel, SelectPercentile, f_classif
+
+import joblib
 from joblib import Parallel, delayed
 import torch
 
@@ -61,8 +62,8 @@ else:
 
 def feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, name):
     print("Starts training XGBoost on uci")
-    if os.path.exists("cache/uci_feature_{name}.joblib"):
-        xg_cls = (f"cache/uci_feature_{name}.joblib")
+    if os.path.exists(f"cache/uci_feature_{name}.joblib"):
+        xg_cls = joblib.load(f"cache/uci_feature_{name}.joblib")
     else:
         xg_cls = xgb.XGBClassifier(objective='binary:logistic',
                                     learning_rate=0.1,
@@ -78,7 +79,7 @@ def feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, name)
         print("Finished training. Overall accuracy {}".format(acc))
 
         # save model
-        joblib.dump(xg_cls, "cache/uci_feature_{name}.joblib")
+        joblib.dump(xg_cls, f"cache/uci_feature_{name}.joblib")
 
     # sfm = SelectFromModel(xg_cls, threshold=threshold)
     # sfm.fit(x_train_val, y_train_val)
@@ -87,8 +88,8 @@ def feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, name)
 
     # Select top k% features
     num_features_to_select = int(len(importance) * k_percent )
-    selector = SelectPercentile(f_classif, percentile=k_percent)
-    selector.fit(x_train_val, y_train_val)
+    sfm = SelectPercentile(f_classif, percentile=k_percent)
+    sfm.fit(x_train_val, y_train_val)
 
     # Transform the data to include only selected features
     x_train_val_selected = sfm.transform(x_train_val)
@@ -452,4 +453,4 @@ if __name__ == '__main__':
     # run_combine_all_ration()    
     # train_fedonce_sup(unlign_ratio = 0.9)
 #     run_vertical_fl_sup_all_ration()
-    run_combine_ft_selection_all_ration()
+    run_combine_ft_selection_all_ration(active_party = 0)

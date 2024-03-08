@@ -9,7 +9,7 @@ from model.models import FC
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.inspection import permutation_importance
 from sklearn.feature_selection import SelectFromModel
-from sklearn.externals import joblib 
+import joblib 
 from joblib import Parallel, delayed
 import torch
 
@@ -362,7 +362,7 @@ def train_combine(remove_ratio = 0, active_party = -1, k_percent = 1):
         print("x_test shape: {}".format(x_test.shape))
         print("ratio of positive samples: {}".format(np.sum(y_test) / len(y_test)))
     if k_percent < 1:
-        x_train_val, x_test = feature_selection(x_train_val, y_train_val, x_test, y_test, threshold, f"combine_active_{active_party}")
+        x_train_val, x_test = feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, f"combine_active_{active_party}")
 
     kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
 

@@ -8,6 +8,8 @@ from model.models import FC
 
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.inspection import permutation_importance
+from sklearn.feature_selection import SelectFromModel
+from sklearn.externals import joblib 
 from joblib import Parallel, delayed
 import torch
 
@@ -23,6 +25,8 @@ from sklearn.metrics import accuracy_score, f1_score, mean_squared_error
 import matplotlib.pyplot as plt
 from sklearn.model_selection import KFold
 
+
+## Feature importance sort
 
 # load data
 xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2)
@@ -55,6 +59,45 @@ else:
 # load importance from file
     importance = np.loadtxt("cache/feature_importance_uci.txt")
 
+def feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, name):
+    print("Starts training XGBoost on uci")
+    if os.path.exists("cache/uci_feature_{name}.joblib"):
+        xg_cls = (f"cache/uci_feature_{name}.joblib")
+    else:
+        xg_cls = xgb.XGBClassifier(objective='binary:logistic',
+                                    learning_rate=0.1,
+                                    max_depth=6,
+                                    n_estimators=100,
+                                    reg_alpha=10,
+                                    verbosity=2)
+
+        xg_cls.fit(x_train_val, y_train_val, eval_set=[(x_train_val, y_train_val), (x_test, y_test)], eval_metric='auc')
+        y_pred = xg_cls.predict(x_test)
+        acc = accuracy_score(y_test, y_pred)
+        importance = xg_cls.feature_importances_
+        print("Finished training. Overall accuracy {}".format(acc))
+
+        # save model
+        joblib.dump(xg_cls, "cache/uci_feature_{name}.joblib")
+
+    # sfm = SelectFromModel(xg_cls, threshold=threshold)
+    # sfm.fit(x_train_val, y_train_val)
+
+    importance = xg_cls.feature_importances_
+
+    # Select top k% features
+    num_features_to_select = int(len(importance) * k_percent )
+    selector = SelectPercentile(f_classif, percentile=k_percent)
+    selector.fit(x_train_val, y_train_val)
+
+    # Transform the data to include only selected features
+    x_train_val_selected = sfm.transform(x_train_val)
+    x_test_selected = sfm.transform(x_test)
+
+    print("x_train_val_selected.shape: ", x_train_val_selected.shape)
+    print("x_test_selected.shape: ", x_test_selected.shape)
+
+    return x_train_val_selected, x_test_selected
 
 ## FedOnce
 def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 0):
@@ -294,7 +337,7 @@ def train_fedonce_sup(unlign_ratio = 0.1):
     return mean, std
 
 # combine
-def train_combine(remove_ratio = 0.1, active_party = -1):
+def train_combine(remove_ratio = 0, active_party = -1, k_percent = 1):
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio)
 
     if active_party == -1:
@@ -318,8 +361,8 @@ def train_combine(remove_ratio = 0.1, active_party = -1):
         x_test = xs_test[active_party]
         print("x_test shape: {}".format(x_test.shape))
         print("ratio of positive samples: {}".format(np.sum(y_test) / len(y_test)))
-
-
+    if k_percent < 1:
+        x_train_val, x_test = feature_selection(x_train_val, y_train_val, x_test, y_test, threshold, f"combine_active_{active_party}")
 
     kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
 
@@ -394,14 +437,19 @@ def run_combine_all_ration():
     ratios = np.arange(0.1, 1.0, 0.1)
     Parallel(n_jobs=6)(delayed(train_combine)(remove_ratio = ratio) for ratio in ratios)
 
+def run_combine_ft_selection_all_ration(active_party):
+    ratios = np.arange(0.1, 1.0, 0.1)
+    Parallel(n_jobs=6)(delayed(train_combine)(active_party = active_party, k_percent = ratio) for ratio in ratios)
+
 if __name__ == '__main__':
-    # train_combine(remove_ratio=0)
+    # train_combine(remove_ratio=0, active_party = 0, k_percent = 0.1)
     # train_fedonce_ssl(unlign_ratio = 0.1)
     # run_vertical_fl_ssl_all_ration()
     # run_vertical_fl_all_ration()
     # run_vertical_fl_split_all_ration()
-    run_vertical_fl_noise_all_ration()
+    # run_vertical_fl_noise_all_ration()
     # train_fedonce(remove_ratio = 0, active_party= 1)
     # run_combine_all_ration()    
     # train_fedonce_sup(unlign_ratio = 0.9)
 #     run_vertical_fl_sup_all_ration()
+    run_combine_ft_selection_all_ration()

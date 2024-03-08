@@ -408,7 +408,7 @@ def train_combine(remove_ratio = 0, active_party = -1, k_percent = 1):
     for i, result in enumerate(acc_summary):
         mean = np.mean(result)
         std = np.std(result)
-    print("remove_ratio {:.1f}, active_party {:.1f}, k_percent {:.1f}: accuracy mean={}, std={}".format(mean, std))
+    print("remove_ratio {:.1f}, active_party {:.1f}, k_percent {:.1f}: accuracy mean={}, std={}".format(remove_ratio, active_party, k_percent, mean, std))
     for i, result in enumerate(f1_summary):
         mean = np.mean(result)
         std = np.std(result)

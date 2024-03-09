@@ -440,7 +440,7 @@ def run_combine_all_ration():
 
 def run_combine_ft_selection_all_ration(active_party):
     ratios = np.arange(0.1, 1.0, 0.1)
-    Parallel(n_jobs=6)(delayed(train_combine)(active_party = active_party, k_percent = ratio) for ratio in ratios)
+    Parallel(n_jobs=6)(delayed(train_combine)(active_party = active_party, k_percent = ratio*100) for ratio in ratios)
 
 if __name__ == '__main__':
     # train_combine(remove_ratio=0, active_party = 0, k_percent = 0.1)

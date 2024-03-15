@@ -22,43 +22,47 @@ import zipfile
 import numpy as np
 
 import xgboost as xgb
-from sklearn.metrics import accuracy_score, f1_score, mean_squared_error
+from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, precision_score, recall_score
 import matplotlib.pyplot as plt
 from sklearn.model_selection import KFold
 
 
 ## Feature importance sort
 
-# load data
-xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2)
+def get_feature_importance_uci():
+    # load data
+    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2)
 
-x_train_val = np.concatenate(xs_train_val, axis=1)
+    x_train_val = np.concatenate(xs_train_val, axis=1)
 
-x_test = np.concatenate(xs_test, axis=1)
+    x_test = np.concatenate(xs_test, axis=1)
 
-# calculate XGBoost feature importance
-print("Starts training XGBoost on uci")
-if os.path.exists("cache/feature_importance_uci.txt"):
-    importance = np.loadtxt("cache/feature_importance_uci.txt")
-else:
-    xg_cls = xgb.XGBClassifier(objective='binary:logistic',
-                                learning_rate=0.1,
-                                max_depth=6,
-                                n_estimators=100,
-                                reg_alpha=10,
-                                verbosity=2)
+    # calculate XGBoost feature importance
+    print("Starts training XGBoost on uci")
+    if os.path.exists("cache/feature_importance_uci.txt"):
+        importance = np.loadtxt("cache/feature_importance_uci.txt")
+    else:
+        xg_cls = xgb.XGBClassifier(objective='binary:logistic',
+                                    learning_rate=0.1,
+                                    max_depth=6,
+                                    n_estimators=100,
+                                    reg_alpha=10,
+                                    verbosity=2)
 
-    xg_cls.fit(x_train_val, y_train_val, eval_set=[(x_train_val, y_train_val), (x_test, y_test)], eval_metric='auc')
-    y_pred = xg_cls.predict(x_test)
-    acc = accuracy_score(y_test, y_pred)
-    importance = xg_cls.feature_importances_
-    print("Finished training. Overall accuracy {}".format(acc))
+        xg_cls.fit(x_train_val, y_train_val, eval_set=[(x_train_val, y_train_val), (x_test, y_test)], eval_metric='auc')
+        y_pred = xg_cls.predict(x_test)
+        acc = accuracy_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred)
+        importance = xg_cls.feature_importances_
+        print("Finished training. Overall accuracy {}".format(acc))
+        print("F1 score: ", f1)
+        # save feature importance
+        np.savetxt("cache/feature_importance_uci.txt", importance)
 
-    # save feature importance
-    np.savetxt("cache/feature_importance_uci.txt", importance)
-
-# load importance from file
-    importance = np.loadtxt("cache/feature_importance_uci.txt")
+        # load importance from file
+        importance = np.loadtxt("cache/feature_importance_uci.txt")
+    
+    return importance
 
 def feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, name):
     print("Starts training XGBoost on uci")
@@ -101,10 +105,15 @@ def feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, name)
     return x_train_val_selected, x_test_selected
 
 ## FedOnce
-def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 0):
+def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 0, k_percent = 100):
     num_parties = 2
-    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=np.argsort(importance),
-                                                          feature_ratio_beta = beta, noise_ratio = noise_ratio)
+    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=None,
+                                                        feature_ratio_beta = beta, noise_ratio = noise_ratio)
+
+    if k_percent < 100:
+        xs_train_val[active_party], xs_test[active_party] = feature_selection(xs_train_val[active_party], y_train_val, xs_test[active_party], y_test, k_percent, f"fedonce_active_{active_party}")
+
+
     print("Active party {} starts training".format(active_party))
     score_list = []
     f1_summary = []
@@ -126,7 +135,7 @@ def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 
             active_party_id=active_party,
             name=model_name,
             num_epochs=100,
-            num_local_rounds=100,
+            num_local_rounds=1,
             local_lr=3e-4,
             local_hidden_layers=[50, 30],
             local_batch_size=100,
@@ -168,12 +177,12 @@ def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 
     
     mean = np.mean(score_list)
     std = np.std(score_list)
-    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}, noise_ratio {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}, noise_ratio {:.1f}, k_percent {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean, std)
     print(out)
 
     mean = np.mean(f1_summary)
     std = np.std(f1_summary)
-    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean, std)
     print(out)
     return mean, std
 
@@ -338,7 +347,7 @@ def train_fedonce_sup(unlign_ratio = 0.1):
     return mean, std
 
 # combine
-def train_combine(remove_ratio = 0, active_party = -1, k_percent = 1):
+def train_combine(remove_ratio = 0, active_party = -1, k_percent = 100):
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio)
 
     if active_party == -1:
@@ -442,8 +451,14 @@ def run_combine_ft_selection_all_ration(active_party):
     ratios = np.arange(0.1, 1.0, 0.1)
     Parallel(n_jobs=6)(delayed(train_combine)(active_party = active_party, k_percent = ratio*100) for ratio in ratios)
 
+def run_vertical_fl_ft_selection_all_ration(active_party):
+    ratios = np.arange(0.1, 1.0, 0.1)
+    Parallel(n_jobs=6)(delayed(train_fedonce)(active_party = active_party, k_percent = ratio*100) for ratio in ratios)
+
 if __name__ == '__main__':
-    # train_combine(remove_ratio=0, active_party = 0, k_percent = 0.1)
+    importance = get_feature_importance_uci()
+    print("Feature importance: ", importance)
+    # train_combine(remove_ratio=0, active_party = -1)
     # train_fedonce_ssl(unlign_ratio = 0.1)
     # run_vertical_fl_ssl_all_ration()
     # run_vertical_fl_all_ration()
@@ -453,4 +468,5 @@ if __name__ == '__main__':
     # run_combine_all_ration()    
     # train_fedonce_sup(unlign_ratio = 0.9)
 #     run_vertical_fl_sup_all_ration()
-    run_combine_ft_selection_all_ration(active_party = 0)
+    # run_combine_ft_selection_all_ration(active_party = 1)
+    # run_vertical_fl_ft_selection_all_ration(active_party = 1)

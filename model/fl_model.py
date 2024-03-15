@@ -27,6 +27,66 @@ from utils.utils import convert_name_to_path
 from utils.exceptions import *
 from privacy.eps_calculator import GradientDPCalculator, GaussianDPCalculator
 
+import joblib
+from joblib import Parallel, delayed
+import torch
+
+import os.path
+import wget
+import bz2
+import shutil
+import zipfile
+import numpy as np
+
+import xgboost as xgb
+from sklearn.metrics import accuracy_score, f1_score, mean_squared_error
+import matplotlib.pyplot as plt
+from sklearn.model_selection import KFold
+from sklearn.feature_selection import SelectFromModel, SelectPercentile, f_classif
+
+
+def feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, name):
+    print("Starts training XGBoost on uci")
+    print("x_train_val.shape: ", x_train_val.shape)
+    if os.path.exists(f"cache/uci_feature_{name}.joblib"):
+        xg_cls = joblib.load(f"cache/uci_feature_{name}.joblib")
+    else:
+        xg_cls = xgb.XGBClassifier(objective='binary:logistic',
+                                    learning_rate=0.1,
+                                    max_depth=6,
+                                    n_estimators=100,
+                                    reg_alpha=10,
+                                    verbosity=2)
+
+        xg_cls.fit(x_train_val, y_train_val, eval_set=[(x_train_val, y_train_val), (x_test, y_test)], eval_metric='auc')
+        y_pred = xg_cls.predict(x_test)
+        acc = accuracy_score(y_test, y_pred)
+        importance = xg_cls.feature_importances_
+        print("Finished training. Overall accuracy {}".format(acc))
+
+        # save model
+        joblib.dump(xg_cls, f"cache/uci_feature_{name}.joblib")
+
+    # sfm = SelectFromModel(xg_cls, threshold=threshold)
+    # sfm.fit(x_train_val, y_train_val)
+
+    importance = xg_cls.feature_importances_
+
+    # Select top k% features
+    num_features_to_select = int(len(importance) * k_percent )
+    sfm = SelectPercentile(f_classif, percentile=k_percent)
+    sfm.fit(x_train_val, y_train_val)
+
+    # Transform the data to include only selected features
+    x_train_val_selected = sfm.transform(x_train_val)
+    x_test_selected = sfm.transform(x_test)
+
+    print("x_train_val_selected.shape: ", x_train_val_selected.shape)
+    print("x_test_selected.shape: ", x_test_selected.shape)
+
+    return x_train_val_selected, x_test_selected
+
+
 
 class VerticalFLModel:
     def __init__(self, num_parties, active_party_id, name="", num_epochs=100, num_local_rounds=1, local_lr=1e-4,
@@ -259,6 +319,8 @@ class VerticalFLModel:
             y = y.todense()
         Z_copy = Z.copy()
         num_instances = X_active.shape[0]
+
+        
 
         if self.task in ["binary_classification", "regression"]:
             # party 0 is active party
@@ -551,6 +613,15 @@ class VerticalFLModel:
             num_instances = num_instances - len(noise_index)
 
         # initialize agg model
+
+        # if k_percent < 100:
+        #     passive_party_range = list(range(self.num_parties))
+        #     passive_party_range.remove(self.active_party_id)
+        #     print("passive_party_range:", passive_party_range)
+        #     # import pdb; pdb.set_trace()
+        #     Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
+        #     Xs[self.active_party_id], Xs_test = feature_selection(Xs[self.active_party_id], y, Xs_test, y_test, k_percent, f"fedonce_active_{self.active_party_id}")
+
         if self.task in ["binary_classification", "regression"]:
             num_features = Xs[self.active_party_id].shape[1]
             if self.model_type == 'fc':

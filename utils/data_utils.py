@@ -74,7 +74,7 @@ def bias_vertical_split_ratio(x_train, x_test, num_good_features, good_feature_r
     b_test = x_test[:, b_feature_range]
     return [a_train, b_train], [a_test, b_test]
 
-def bias_vertical_split(x, beta, with_noise = False):
+def bias_vertical_split(x, beta, noise_ratio = 0, active_party = 0):
     np.random.seed(0)
     # split data into biased two parts
     if isinstance(x, csr_matrix):
@@ -85,8 +85,11 @@ def bias_vertical_split(x, beta, with_noise = False):
     a = x[:, :split_index]
     b = x[:, split_index:]
     
-    if with_noise:
-        b = add_noise(b)
+    if noise_ratio > 0:
+        if active_party == 0:
+            b = add_noise(b, noise_ratio)
+        else:
+            a = add_noise(a, noise_ratio)
     
     return [a, b]
 
@@ -640,7 +643,9 @@ def load_nus_wide(path, download=True, label_type='airport', use_cache=True, bal
     return result
 
 
-def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0, feature_order = None, feature_ratio_beta = None):
+def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0, 
+             feature_order = None, feature_ratio_beta = None, 
+             noise_ratio = 0, active_party = 0):
     df = pd.read_csv('data/uci/default_of_credit_card_clients.csv', index_col='ID')
     df.rename(columns={'default payment next month':'DEFAULT'}, inplace=True)
     df.rename(columns={'PAY_0': 'PAY_1'}, inplace=True)
@@ -684,11 +689,18 @@ def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0, feature_order =
         X_train_std['PAY_AMT' + str(i)] = scaler.fit_transform(X_train_raw['PAY_AMT' + str(i)].values.reshape(-1, 1))
         X_test_std['PAY_AMT' + str(i)] = scaler.transform(X_test_raw['PAY_AMT' + str(i)].values.reshape(-1, 1))
     
-    # X_train_std = X_train_std.to_numpy()[..., :12]
-    # X_test_std = X_test_std.to_numpy()[..., :12]
 
     X_train_std = X_train_std.to_numpy()
     X_test_std = X_test_std.to_numpy()
+
+    rng = np.random.RandomState(10)
+
+    # Tạo một chỉ số hoán đổi
+    permutation_indices = rng.permutation(X_train_std.shape[1])
+
+    # Shuffle các cột dựa trên chỉ số hoán đổi
+    X_train_std = X_train_std[:, permutation_indices]
+    X_test_std = X_test_std[:, permutation_indices]
 
     if feature_order is not None:
         assert feature_order.size == X_train_std.shape[1], "Feature orders mismatch the number of features"
@@ -697,10 +709,10 @@ def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0, feature_order =
 
     if feature_ratio_beta is not None:
         assert num_parties == 2
-        X_train_std = bias_vertical_split(X_train_std, feature_ratio_beta)
-        X_test_std = bias_vertical_split(X_test_std, feature_ratio_beta)
+        x_train = bias_vertical_split(X_train_std, feature_ratio_beta, noise_ratio, active_party)
+        x_test = bias_vertical_split(X_test_std, feature_ratio_beta)
     else:
-        x_train = bias_vertical_split(X_train_std, 0.5)
+        x_train = bias_vertical_split(X_train_std, 0.5, noise_ratio, active_party)
         x_test = bias_vertical_split(X_test_std, 0.5)
     
     y_train = y_train.to_numpy()

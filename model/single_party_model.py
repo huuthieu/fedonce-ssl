@@ -12,7 +12,7 @@ import torch_optimizer as adv_optim
 
 from scipy.sparse import csr_matrix
 
-from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, roc_auc_score
+from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, roc_auc_score, precision_score, recall_score
 
 
 from model.models import FC, CNN, ResNet18, SmallCNN, NCF
@@ -269,6 +269,11 @@ class SingleParty:
                         test_acc = accuracy_score(y_test, y_pred_test)
                         train_f1 = f1_score(y, y_pred_train)
                         test_f1 = f1_score(y_test, y_pred_test)
+                        train_precision = precision_score(y, y_pred_train)
+                        test_precision = precision_score(y_test, y_pred_test)
+                        train_recall = recall_score(y, y_pred_train)
+                        test_recall = recall_score(y_test, y_pred_test)
+
                         train_auc = roc_auc_score(y, y_score_train)
                         test_auc = roc_auc_score(y_test, y_score_test)
                         if test_f1 > best_test_f1:
@@ -279,6 +284,9 @@ class SingleParty:
                             best_test_auc = test_auc
                         print("[Final] Epoch {}: train accuracy {}, test accuracy {}".format(i + 1, train_acc, test_acc))
                         print("[Final] Epoch {}: train f1 {}, test f1 {}".format(i + 1, train_f1, test_f1))
+                        print("[Final] Epoch {}: train precision {}, test precision {}".format(i + 1, train_precision, test_precision))
+                        print("[Final] Epoch {}: train recall {}, test recall {}".format(i + 1, train_recall, test_recall))
+                        
                         print("[Final] Epoch {}: train auc {}, test auc {}".format(i + 1, train_auc, test_auc))
                         print("[Final] Epoch {}: best test acc {}, best test f1 {}, best test auc {}"
                               .format(i + 1, best_test_acc, best_test_f1, best_test_auc))

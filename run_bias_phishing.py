@@ -1,6 +1,6 @@
 from utils.data_utils import load_data_cross_validation, load_data_train_test, get_random_noisy_row
 # from model.fl_model import VerticalFLModel
-from model.fl_model_ssl import VerticalFLModel
+from model.fl_model import VerticalFLModel
 from model.single_party_model import SingleParty
 from model.split_nn_model import SplitNNModel
 from model.models import FC

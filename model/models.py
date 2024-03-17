@@ -343,6 +343,58 @@ class AggModel(nn.Module):
         return final_out
 
 
+class AggModelTest(nn.Module):
+    def __init__(self,input_size, mid_output_dim, num_parties: int,
+                 agg_hidden_sizes, active_model: nn.Module, output_dim=1, activation=None):
+        super().__init__()
+        self.activation = activation
+        self.mid_output_size = mid_output_dim
+        self.num_parties = num_parties
+        self.input_size = input_size
+        self.active_model = active_model
+
+        # FC layers for aggregation
+        self.agg_fc_layers = nn.ModuleList([nn.Linear(input_size, agg_hidden_sizes[0])])
+        if len(agg_hidden_sizes) != 0:
+            for i in range(len(agg_hidden_sizes) - 1):
+                self.agg_fc_layers.append(nn.Linear(agg_hidden_sizes[i], agg_hidden_sizes[i + 1]))
+        self.agg_fc_layers.append(nn.Linear(agg_hidden_sizes[-1], output_dim))
+        self.Z = None
+
+    def forward(self, X):
+        """
+        forward function for Z, X. Z has to be assigned before forward() is called.
+        Not using two inputs is because pytorch_dp only supports one-input module.
+        :param X:
+        :return:
+        """
+        # assert list(Z.size())[0] == list(X.size())[0]
+        Z = self.Z
+        assert Z is not None, "Z has not been defined"
+        # assert list(Z.size())[1] == self.mid_output_size * (self.num_parties - 1), f"{list(Z.size())[1]=},{self.mid_output_size * (self.num_parties - 1)=}"
+
+        # FC layers for active party before aggregation
+        active_out = self.active_model(X)
+
+        # FC layers for aggregation
+        print("active_out.shape", active_out.shape)
+        print("Z.shape", Z.shape)
+        agg_input = torch.cat([active_out, Z], dim=1)
+        out = F.relu(self.agg_fc_layers[0](agg_input))
+        for fc in self.agg_fc_layers[1:-1]:
+            out = F.relu(fc(out))
+        out = self.agg_fc_layers[-1](out)
+        if self.activation is None:
+            final_out = out
+        elif self.activation == 'sigmoid':
+            final_out = torch.sigmoid(out)
+        elif self.activation == 'softmax':
+            final_out = torch.softmax(out, dim=1)
+        else:
+            raise UnsupportedActivationFuncError
+        return final_out
+
+
 class NCF(nn.Module):
     def __init__(self, counts: list, emb_dims: list, hidden_sizes: list, output_size=1, activation=None):
         super(NCF, self).__init__()

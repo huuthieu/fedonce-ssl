@@ -65,33 +65,7 @@ def get_feature_importance_uci():
     return importance
 
 def feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, name):
-    print("Starts training XGBoost on uci")
-    if os.path.exists(f"cache/uci_feature_{name}.joblib"):
-        xg_cls = joblib.load(f"cache/uci_feature_{name}.joblib")
-    else:
-        xg_cls = xgb.XGBClassifier(objective='binary:logistic',
-                                    learning_rate=0.1,
-                                    max_depth=6,
-                                    n_estimators=100,
-                                    reg_alpha=10,
-                                    verbosity=2)
-
-        xg_cls.fit(x_train_val, y_train_val, eval_set=[(x_train_val, y_train_val), (x_test, y_test)], eval_metric='auc')
-        y_pred = xg_cls.predict(x_test)
-        acc = accuracy_score(y_test, y_pred)
-        importance = xg_cls.feature_importances_
-        print("Finished training. Overall accuracy {}".format(acc))
-
-        # save model
-        joblib.dump(xg_cls, f"cache/uci_feature_{name}.joblib")
-
-    # sfm = SelectFromModel(xg_cls, threshold=threshold)
-    # sfm.fit(x_train_val, y_train_val)
-
-    importance = xg_cls.feature_importances_
-
-    # Select top k% features
-    num_features_to_select = int(len(importance) * k_percent )
+    
     sfm = SelectPercentile(f_classif, percentile=k_percent)
     sfm.fit(x_train_val, y_train_val)
 
@@ -105,12 +79,12 @@ def feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, name)
     return x_train_val_selected, x_test_selected
 
 ## FedOnce
-def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 0, k_percent = 100):
+def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 0, k_percent = 100, select_host = True):
     num_parties = 2
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=None,
                                                         feature_ratio_beta = beta, noise_ratio = noise_ratio)
 
-    if k_percent < 100:
+    if k_percent < 100 and select_host:
         xs_train_val[active_party], xs_test[active_party] = feature_selection(xs_train_val[active_party], y_train_val, xs_test[active_party], y_test, k_percent, f"fedonce_active_{active_party}")
 
 
@@ -134,7 +108,7 @@ def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 
             num_parties=num_parties,
             active_party_id=active_party,
             name=model_name,
-            num_epochs=100,
+            num_epochs=1,
             num_local_rounds=1,
             local_lr=3e-4,
             local_hidden_layers=[50, 30],
@@ -162,8 +136,12 @@ def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 
             epsilon=1,
             delta=1.0/xs_train[0].shape[0]
         )
-        acc, _, _, _  = aggregate_model.train(xs_train, y_train, xs_val, y_val)
-        y_test_score = aggregate_model.predict_agg(xs_test)
+        selected_features = []
+        if select_host == False and k_percent < 100:
+            acc, _, _, _, selected_features  = aggregate_model.train(xs_train, y_train, xs_val, y_val, k_percent = k_percent)
+        else:
+            acc, _, _, _  = aggregate_model.train(xs_train, y_train, xs_val, y_val)
+        y_test_score = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
         y_test_pred = np.where(y_test_score > 0.5, 1, 0)
         test_f1 = f1_score(y_test, y_test_pred)
 
@@ -451,22 +429,23 @@ def run_combine_ft_selection_all_ration(active_party):
     ratios = np.arange(0.1, 1.0, 0.1)
     Parallel(n_jobs=6)(delayed(train_combine)(active_party = active_party, k_percent = ratio*100) for ratio in ratios)
 
-def run_vertical_fl_ft_selection_all_ration(active_party):
+def run_vertical_fl_ft_selection_all_ration(active_party, select_host = True):
     ratios = np.arange(0.1, 1.0, 0.1)
-    Parallel(n_jobs=6)(delayed(train_fedonce)(active_party = active_party, k_percent = ratio*100) for ratio in ratios)
+    Parallel(n_jobs=6)(delayed(train_fedonce)(active_party = active_party, k_percent = ratio*100, 
+                                                  select_host= select_host) for ratio in ratios)
 
 if __name__ == '__main__':
-    importance = get_feature_importance_uci()
-    print("Feature importance: ", importance)
-    # train_combine(remove_ratio=0, active_party = -1)
+    # importance = get_feature_importance_uci()
+    # print("Feature importance: ", importance)
+    # train_combine(remove_ratio=0, active_party = 1)
     # train_fedonce_ssl(unlign_ratio = 0.1)
     # run_vertical_fl_ssl_all_ration()
     # run_vertical_fl_all_ration()
     # run_vertical_fl_split_all_ration()
     # run_vertical_fl_noise_all_ration()
-    # train_fedonce(remove_ratio = 0, active_party= 1)
+    train_fedonce(remove_ratio = 0, active_party= 1, k_percent = 90, select_host = False)
     # run_combine_all_ration()    
     # train_fedonce_sup(unlign_ratio = 0.9)
 #     run_vertical_fl_sup_all_ration()
-    # run_combine_ft_selection_all_ration(active_party = 1)
-    # run_vertical_fl_ft_selection_all_ration(active_party = 1)
+    # run_combine_ft_selection_all_ration(active_party = 0)
+    # run_vertical_fl_ft_selection_all_ration(active_party = 0, select_host = False)

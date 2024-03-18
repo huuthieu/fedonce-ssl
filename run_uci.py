@@ -108,8 +108,8 @@ def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 
             num_parties=num_parties,
             active_party_id=active_party,
             name=model_name,
-            num_epochs=1,
-            num_local_rounds=1,
+            num_epochs=100,
+            num_local_rounds=100,
             local_lr=3e-4,
             local_hidden_layers=[50, 30],
             local_batch_size=100,
@@ -443,9 +443,9 @@ if __name__ == '__main__':
     # run_vertical_fl_all_ration()
     # run_vertical_fl_split_all_ration()
     # run_vertical_fl_noise_all_ration()
-    train_fedonce(remove_ratio = 0, active_party= 1, k_percent = 90, select_host = False)
+    # train_fedonce(remove_ratio = 0, active_party= 0, k_percent = 10, select_host = False)
     # run_combine_all_ration()    
     # train_fedonce_sup(unlign_ratio = 0.9)
 #     run_vertical_fl_sup_all_ration()
     # run_combine_ft_selection_all_ration(active_party = 0)
-    # run_vertical_fl_ft_selection_all_ration(active_party = 0, select_host = False)
+    run_vertical_fl_ft_selection_all_ration(active_party = 0, select_host = False)

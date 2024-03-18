@@ -699,73 +699,74 @@ class VerticalFLModel:
             print("Z shape before train: ", Z.shape)
             self.train_aggregation(ep, Z, Xs[self.active_party_id], y, model_optimizer)
 
-            # if Xs_test is not None and y_test is not None and (ep + 1) % self.test_freq == 0:
-            #     self.chmod('eval')
-            #     with torch.no_grad():
-            #         if self.task == 'binary_classification':
-            #             print("Start evaluating aggregation model")
-            #             y_score_train = self.predict_agg(Xs, selection_features=selected_features)
-            #             y_score_test = self.predict_agg(Xs_test, selection_features=selected_features)
-            #             y_pred_train = np.where(y_score_train > 0.5, 1, 0)
-            #             y_pred_test = np.where(y_score_test > 0.5, 1, 0)
-            #             train_acc = accuracy_score(y, y_pred_train)
-            #             test_acc = accuracy_score(y_test, y_pred_test)
-            #             train_f1 = f1_score(y, y_pred_train)
-            #             test_f1 = f1_score(y_test, y_pred_test)
-            #             train_auc = roc_auc_score(y, y_score_train)
-            #             test_auc = roc_auc_score(y_test, y_score_test)
-            #             if test_f1 > best_test_f1:
-            #                 best_test_f1 = test_f1
-            #             if test_acc > best_test_acc:
-            #                 best_test_acc = test_acc
-            #             if test_auc > best_test_auc:
-            #                 best_test_auc = test_auc
-            #             print(
-            #                 "[Final] Epoch {}: train accuracy {}, test accuracy {}".format(ep + 1, train_acc, test_acc))
-            #             print("[Final] Epoch {}: train f1 {}, test f1 {}".format(ep + 1, train_f1, test_f1))
-            #             print("[Final] Epoch {}: train auc {}, test f1 {}".format(ep + 1, train_auc, test_auc))
-            #             print("[Final] Epoch {}: best test acc {}, best test f1 {}, best test auc {}".format(ep + 1,
-            #                                                                                                  best_test_acc,
-            #                                                                                                  best_test_f1,
-            #                                                                                                  best_test_auc))
-            #             self.writer.add_scalars("Aggregation model/train & test accuracy",
-            #                                     {'train': train_acc,
-            #                                      'test': test_acc}, ep + 1)
-            #             self.writer.add_scalars("Aggregation model/train & test F1-score",
-            #                                     {'train': train_f1,
-            #                                      'test': test_f1}, ep + 1)
-            #             self.writer.add_scalars("Aggregation model/train & test AUC score",
-            #                                     {'train': train_auc,
-            #                                      'test': test_auc}, ep + 1)
-            #         elif self.task == 'regression':
-            #             y_score_train = self.predict_agg(Xs)
-            #             y_score_test = self.predict_agg(Xs_test)
-            #             train_rmse = np.sqrt(mean_squared_error(y, y_score_train))
-            #             test_rmse = np.sqrt(mean_squared_error(y_test, y_score_test))
-            #             if test_rmse < best_test_rmse:
-            #                 best_test_rmse = test_rmse
-            #             print("[Final] Epoch {}: train rmse {}, test rmse {}".format(ep + 1, train_rmse, test_rmse))
-            #             print("[Final] Epoch {}: best test rmse {}".format(ep + 1, best_test_rmse))
-            #             self.writer.add_scalars("Aggregation model/train & test rmse",
-            #                                     {'train': train_rmse,
-            #                                      'test': test_rmse}, ep + 1)
-            #         elif self.task == 'multi_classification':
-            #             if self.model_type == 'fc':
-            #                 train_acc = self.eval_image(Xs, y, ['accuracy'], has_transform=False)
-            #                 test_acc = self.eval_image(Xs_test, y_test, ['accuracy'], has_transform=False)
-            #             else:
-            #                 train_acc = self.eval_image(Xs, y, ['accuracy'], has_transform=True)
-            #                 test_acc = self.eval_image(Xs_test, y_test, ['accuracy'], has_transform=True)
-            #             if test_acc > best_test_acc:
-            #                 best_test_acc = test_acc
-            #             print(
-            #                 "[Final] Epoch {}: train accuracy {}, test accuracy {}".format(ep + 1, train_acc, test_acc))
-            #             print("[Final] Epoch {}: best test acc {}".format(ep + 1, best_test_acc))
-            #             self.writer.add_scalars("Aggregation model/train & test accuracy",
-            #                                     {'train': train_acc,
-            #                                      'test': test_acc}, ep + 1)
-            #         else:
-            #             raise UnsupportedTaskError
+            if Xs_test is not None and y_test is not None and (ep + 1) % self.test_freq == 0:
+                self.chmod('eval')
+                with torch.no_grad():
+                    if self.task == 'binary_classification':
+                        print("Start evaluating aggregation model")
+                        print("selected_features: ", selected_features)
+                        y_score_train = self.predict_agg(Xs, selection_features=selected_features)
+                        y_score_test = self.predict_agg(Xs_test, selection_features=selected_features)
+                        y_pred_train = np.where(y_score_train > 0.5, 1, 0)
+                        y_pred_test = np.where(y_score_test > 0.5, 1, 0)
+                        train_acc = accuracy_score(y, y_pred_train)
+                        test_acc = accuracy_score(y_test, y_pred_test)
+                        train_f1 = f1_score(y, y_pred_train)
+                        test_f1 = f1_score(y_test, y_pred_test)
+                        train_auc = roc_auc_score(y, y_score_train)
+                        test_auc = roc_auc_score(y_test, y_score_test)
+                        if test_f1 > best_test_f1:
+                            best_test_f1 = test_f1
+                        if test_acc > best_test_acc:
+                            best_test_acc = test_acc
+                        if test_auc > best_test_auc:
+                            best_test_auc = test_auc
+                        print(
+                            "[Final] Epoch {}: train accuracy {}, test accuracy {}".format(ep + 1, train_acc, test_acc))
+                        print("[Final] Epoch {}: train f1 {}, test f1 {}".format(ep + 1, train_f1, test_f1))
+                        print("[Final] Epoch {}: train auc {}, test f1 {}".format(ep + 1, train_auc, test_auc))
+                        print("[Final] Epoch {}: best test acc {}, best test f1 {}, best test auc {}".format(ep + 1,
+                                                                                                             best_test_acc,
+                                                                                                             best_test_f1,
+                                                                                                             best_test_auc))
+                        self.writer.add_scalars("Aggregation model/train & test accuracy",
+                                                {'train': train_acc,
+                                                 'test': test_acc}, ep + 1)
+                        self.writer.add_scalars("Aggregation model/train & test F1-score",
+                                                {'train': train_f1,
+                                                 'test': test_f1}, ep + 1)
+                        self.writer.add_scalars("Aggregation model/train & test AUC score",
+                                                {'train': train_auc,
+                                                 'test': test_auc}, ep + 1)
+                    elif self.task == 'regression':
+                        y_score_train = self.predict_agg(Xs, selection_features=selected_features)
+                        y_score_test = self.predict_agg(Xs_test, selection_features=selected_features)
+                        train_rmse = np.sqrt(mean_squared_error(y, y_score_train))
+                        test_rmse = np.sqrt(mean_squared_error(y_test, y_score_test))
+                        if test_rmse < best_test_rmse:
+                            best_test_rmse = test_rmse
+                        print("[Final] Epoch {}: train rmse {}, test rmse {}".format(ep + 1, train_rmse, test_rmse))
+                        print("[Final] Epoch {}: best test rmse {}".format(ep + 1, best_test_rmse))
+                        self.writer.add_scalars("Aggregation model/train & test rmse",
+                                                {'train': train_rmse,
+                                                 'test': test_rmse}, ep + 1)
+                    elif self.task == 'multi_classification':
+                        if self.model_type == 'fc':
+                            train_acc = self.eval_image(Xs, y, ['accuracy'], has_transform=False)
+                            test_acc = self.eval_image(Xs_test, y_test, ['accuracy'], has_transform=False)
+                        else:
+                            train_acc = self.eval_image(Xs, y, ['accuracy'], has_transform=True)
+                            test_acc = self.eval_image(Xs_test, y_test, ['accuracy'], has_transform=True)
+                        if test_acc > best_test_acc:
+                            best_test_acc = test_acc
+                        print(
+                            "[Final] Epoch {}: train accuracy {}, test accuracy {}".format(ep + 1, train_acc, test_acc))
+                        print("[Final] Epoch {}: best test acc {}".format(ep + 1, best_test_acc))
+                        self.writer.add_scalars("Aggregation model/train & test accuracy",
+                                                {'train': train_acc,
+                                                 'test': test_acc}, ep + 1)
+                    else:
+                        raise UnsupportedTaskError
             epoch_duration_sec = (datetime.now() - start_epoch).seconds
             print("Epoch {} duration {} sec".format(ep + 1, epoch_duration_sec), flush=True)
         # save aggregate model
@@ -817,7 +818,7 @@ class VerticalFLModel:
                 Z_pred_i = self.local_models[local_party_id].to(self.device)(X_tensor)
                 local_labels_pred.append(Z_pred_i.detach().cpu().numpy()[None, :, :])
         local_labels_pred = np.concatenate(local_labels_pred, axis=0)
-        if selection_features != []:
+        if len(selection_features) > 0:
             local_labels_pred = local_labels_pred[..., selection_features]
         num_instances = local_labels_pred.shape[1]
 
@@ -826,9 +827,8 @@ class VerticalFLModel:
         X_tensor = torch.from_numpy(Xs[self.active_party_id]).float().to(self.device)
         model = self.agg_model.to(self.device)
         model.Z = Z_tensor
-        print("model.Z: ", model.Z.shape)
-        print("X_tensor: ", X_tensor.shape)
-        print("model: ", model)
+        # print("model.Z: ", model.Z.shape)
+        # print("X_tensor: ", X_tensor.shape)
         y_score = model(X_tensor)
         y_score = y_score.detach().cpu().numpy()
         return y_score

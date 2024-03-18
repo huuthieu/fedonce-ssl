@@ -377,8 +377,6 @@ class AggModelTest(nn.Module):
         active_out = self.active_model(X)
 
         # FC layers for aggregation
-        print("active_out.shape", active_out.shape)
-        print("Z.shape", Z.shape)
         agg_input = torch.cat([active_out, Z], dim=1)
         out = F.relu(self.agg_fc_layers[0](agg_input))
         for fc in self.agg_fc_layers[1:-1]:

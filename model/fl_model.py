@@ -155,6 +155,8 @@ class VerticalFLModel:
         num_instances = X.shape[0]
         start_local_time = datetime.now()
 
+        import pdb; pdb.set_trace()
+ 
         # define data and dataloader
         if self.task in ["binary_classification", "regression"]:
             X_tensor = torch.from_numpy(X).float()
@@ -231,7 +233,6 @@ class VerticalFLModel:
                 optimizer.zero_grad()
 
                 y_pred = model(X_i)
-
                 if update_targets:
                     output = y_pred.cpu().detach().numpy()
                     new_targets = calc_optimal_target_permutation(output, y_i.cpu().detach().numpy())

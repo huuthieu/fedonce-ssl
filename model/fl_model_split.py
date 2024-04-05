@@ -6,6 +6,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision.transforms import transforms
 
+
 from datetime import datetime
 
 torch.manual_seed(0)
@@ -13,6 +14,8 @@ torch.manual_seed(0)
 from scipy.sparse import csr_matrix
 
 from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, roc_auc_score
+from sklearn.cluster import KMeans
+
 
 from torchdp.privacy_engine import PrivacyEngine
 import torch_optimizer as adv_optim
@@ -43,16 +46,6 @@ from sklearn.metrics import accuracy_score, f1_score, mean_squared_error
 import matplotlib.pyplot as plt
 from sklearn.model_selection import KFold
 from sklearn.feature_selection import SelectFromModel, SelectPercentile, f_classif
-
-import sys
-sys.path.append("../pytorch-scarf")
-
-from scarf.loss import NTXent
-from scarf.model import SCARF
-from scarf.dataset import SCARFDataset
-
-from tqdm import tqdm
-
 
 
 def feature_selection(x_train_val, y_train_val, k_percent, name):
@@ -147,74 +140,105 @@ class VerticalFLModel:
     @staticmethod
     def mse_loss(x, y):
         return torch.mean(torch.sum((x - y) ** 2, dim=1))
-    
-    def train_epoch(self, model, criterion, train_loader, optimizer, device):
-        model.train()
-        epoch_loss = 0.0
 
-        for x in train_loader:
-            x = x.to(device)
+    def _cluster_gradients(self, gradients):
+        num_clusters = 2
+        kmeans = KMeans(n_clusters=num_clusters, random_state=0, n_init=1).fit(gradients)
+        cluster_labels = kmeans.labels_
+        print("_cluster_gradients finished.")
+        return cluster_labels
 
-            # get embeddings
-            emb_anchor, emb_positive = model(x)
-
-            # compute loss
-            loss = criterion(emb_anchor, emb_positive)
-            loss.backward()
-
-            # update model weights
-            optimizer.step()
-
-            # reset gradients
-            optimizer.zero_grad()
-
-            # log progress
-            epoch_loss += loss.item()
-
-        return epoch_loss / len(train_loader.dataset)
-
-
-    def dataset_embeddings(self, model, loader, device):
-        embeddings = []
-
-        for x in tqdm(loader):
-            x = x.to(device)
-            embeddings.append(model.get_embeddings(x))
-
-        embeddings = torch.cat(embeddings).cpu().numpy()
-
-        return embeddings
-
-
-    def train_local_party(self, ep, party_id, X, y, model):
+    def train_local_party(self, ep, party_id, X, y, y_real, model):
         """
         Train one local party
         :param ep: index of epochs
         :param party_id: which party
         :param X: local data in party_id
-        :param y: local labels: These labelsflo will be updated!
+        :param y: local labels: These labels will be updated!
         :return: local prediction for X
         """
         if isinstance(X, csr_matrix):
             X = X.todense()
         if isinstance(y, csr_matrix):
             y = y.todense()
+        y_copy = y.copy()
+        num_instances = X.shape[0]
+        start_local_time = datetime.now()
+
+        X_tensor = torch.from_numpy(X).float()
+        y_tensor = torch.from_numpy(y_real).float()  # y will be updated
+        dataset = LocalDataset(X_tensor, y_tensor)
+        
+        data_loader = DataLoader(dataset, batch_size=self.local_batch_size, shuffle=True,
+                                 drop_last=True, num_workers=self.num_workers,
+                                 multiprocessing_context='fork' if self.num_workers > 0 else None)
+
+        bce_loss = nn.BCELoss()
+        total_loss = 0.0
+        num_mini_batches = 0
+        gradient = []
+        for j, (idx, X_i, y_i) in enumerate(data_loader, 0):
+            X_i = X_i.to(self.device)
+            y_i = y_i.to(self.device)
+
+            X_i.requires_grad(True)
+            optimizer.zero_grad()
+
+            y_pred = model(X_i)
+
+            loss = loss_fn(y_pred, y_i)
+
+            total_loss += loss.item()
+            loss.backward()
+
+            if self.privacy == 'MA' and ((j + 1) % self.batches_per_lot != 0) and (j + 1 < len(data_loader)):
+                optimizer.virtual_step()
+            else:
+                optimizer.step()
+            num_mini_batches += 1
+            gradient.append(X_i.grad)
+
 
         # define data and dataloader
         if self.task in ["binary_classification", "regression"]:
-            # X_tensor = torch.from_numpy(X).float()
-            # y_tensor = torch.from_numpy(y).float()  # y will be updated
-            train_ds = SCARFDataset(X, y)
-
-        train_loader = DataLoader(train_ds, batch_size=self.local_batch_size, shuffle=True)
+            X_tensor = torch.from_numpy(X).float()
+            y_tensor = torch.from_numpy(y).float()  # y will be updated
+            dataset = LocalDataset(X_tensor, y_tensor)
+        elif self.task in ["multi_classification"]:
+            # image classification, X is an ndarray of PIL images
+            if self.privacy is None:
+                if self.model_type == 'fc':
+                    X_tensor = torch.from_numpy(X).float()
+                    y_tensor = torch.from_numpy(y).float()  # y will be updated
+                    dataset = LocalDataset(X_tensor, y_tensor)
+                else:
+                    transform_train = transforms.Compose([
+                        transforms.ToPILImage(),
+                        transforms.RandomCrop(self.image_size, padding=self.image_size // 8),
+                        transforms.RandomHorizontalFlip(),
+                        transforms.ToTensor(),
+                        transforms.Normalize(mean=[0.5, ], std=[0.5, ])
+                    ])
+                    dataset = LocalDataset(X, y, transform=transform_train)
+            else:
+                transform_train = transforms.Compose([
+                    transforms.ToPILImage(),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.5, ], std=[0.5, ])
+                ])
+                dataset = LocalDataset(X, y, transform=transform_train)
+        else:
+            raise UnsupportedTaskError
+        data_loader = DataLoader(dataset, batch_size=self.local_batch_size, shuffle=True,
+                                 drop_last=True, num_workers=self.num_workers,
+                                 multiprocessing_context='fork' if self.num_workers > 0 else None)
 
         # define model
         model = model.to(self.device)
         if self.cuda_parallel:
             model = nn.DataParallel(model)
 
-        # loss_fn = self.mse_loss
-        loss_fn = NTXent()
+        loss_fn = self.mse_loss
 
         # define optimizer
         if self.optimizer == 'adam':
@@ -241,25 +265,94 @@ class VerticalFLModel:
 
         total_loss = 0.0
         num_mini_batches = 0
+        for i in range(self.num_local_rounds):
+            start_epoch = datetime.now()
+            update_targets = ((i + 1) % self.update_target_freq == 0)
+            for j, (idx, X_i, y_i) in enumerate(data_loader, 0):
+                X_i = X_i.to(self.device)
+                y_i = y_i.to(self.device)
 
-        loss_history = []
-        for epoch in range(1, self.num_local_rounds + 1):
-            epoch_loss = self.train_epoch(model, loss_fn, train_loader, optimizer, self.device)
-            loss_history.append(epoch_loss)
+                optimizer.zero_grad()
 
-            if epoch % 10 == 0:
-                print(f"epoch {epoch}/{self.num_local_rounds} - loss: {loss_history[-1]:.4f}", end="\r")
+                y_pred = model(X_i)
+                if update_targets:
+                    output = y_pred.cpu().detach().numpy()
+                    new_targets = calc_optimal_target_permutation(output, y_i.cpu().detach().numpy())
+                    new_targets_tensor = torch.from_numpy(new_targets)
+                    dataset.update_targets(idx, new_targets_tensor)
+                    y_i = torch.from_numpy(new_targets).to(self.device)
+
+                loss = loss_fn(y_pred, y_i)
+
+                total_loss += loss.item()
+                loss.backward()
+
+                if self.privacy == 'MA' and ((j + 1) % self.batches_per_lot != 0) and (j + 1 < len(data_loader)):
+                    optimizer.virtual_step()
+                else:
+                    optimizer.step()
+                num_mini_batches += 1
+
+            if self.privacy is None:
+                print("[Local] Party {}, Epoch {}: training loss {}"
+                      .format(party_id, ep * self.num_local_rounds + i + 1, total_loss / num_mini_batches))
+            elif self.privacy == 'MA':
+                epsilon, alpha = optimizer.privacy_engine.get_privacy_spent(self.delta)
+                print("[Local] Party {}, Epoch {}: training loss {}, eps {}, delta {}, alpha {}"
+                      .format(party_id, ep * self.num_local_rounds + i + 1, total_loss / num_mini_batches,
+                              epsilon, self.delta, alpha))
+                self.writer.add_scalar('Party {}/privacy accumulation'.format(party_id),
+                                       epsilon, ep * self.num_agg_rounds + i + 1)
+            else:
+                raise UnsupportedPrivacyMechanismError
+
+            if self.writer:
+                self.writer.add_scalar('Party {}/training loss'.format(party_id),
+                                       total_loss / num_mini_batches, ep * self.num_local_rounds + i + 1)
+            total_loss = 0.0
+            num_mini_batches = 0
+            epoch_duration_sec = (datetime.now() - start_epoch).seconds
+            print("Epoch {} duration {} sec".format(i + 1, epoch_duration_sec), flush=True)
+
+        duration_local = (datetime.now() - start_local_time).seconds
+        print("Local training finished, time = {} sec".format(duration_local))
+
+        assert is_perturbation(y, y_copy)
+
+        # X_tensor = torch.from_numpy(X).float()
+        # y_tensor = torch.from_numpy(y_real).float()  # y will be updated
+        # dataset = LocalDataset(X_tensor, y_tensor)
         
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(loss_history)
-        ax.set_xlabel("epoch")
-        ax.set_ylabel("loss")
+        # data_loader = DataLoader(dataset, batch_size=self.local_batch_size, shuffle=True,
+        #                          drop_last=True, num_workers=self.num_workers,
+        #                          multiprocessing_context='fork' if self.num_workers > 0 else None)
 
-        ## save figure
-        fig_path = f"log/{self.full_name}_party_{party_id}_loss.png"
-        fig.savefig(fig_path)
+        # total_loss = 0.0
+        # num_mini_batches = 0
+        # for i in range(self.num_local_rounds//10):
+        #     for j, (idx, X_i, y_i) in enumerate(data_loader, 0):
+        #         X_i = X_i.to(self.device)
+        #         y_i = y_i.to(self.device)
+
+        #         optimizer.zero_grad()
+
+        #         y_pred = model(X_i)
+
+        #         loss = loss_fn(y_pred, y_i)
+
+        #         total_loss += loss.item()
+        #         loss.backward()
+
+        #         if self.privacy == 'MA' and ((j + 1) % self.batches_per_lot != 0) and (j + 1 < len(data_loader)):
+        #             optimizer.virtual_step()
+        #         else:
+        #             optimizer.step()
+        #         num_mini_batches += 1
 
         return model
+    
+    
+    
 
     def train_aggregation(self, ep, Z, X_active, y, optimizer, scheduler=None):
         """
@@ -464,22 +557,36 @@ class VerticalFLModel:
             if party_id != self.active_party_id:
                 # initialize local model
                 num_features = Xs[party_id].shape[1]
+                if self.task in ["binary_classification", "regression"]:
+                    if self.model_type == 'fc':
+                        local_model = FC(num_features, self.local_hidden_layers, output_size=self.local_output_dim,
+                                         activation='tanh')
+                    elif self.model_type == 'ncf':
+                        local_model = NCF(self.ncf_counts[party_id], self.ncf_embed_dims[party_id],
+                                          self.local_hidden_layers, output_size=self.local_output_dim)
+                    else:
+                        assert False
+                elif self.task in ["multi_classification"]:
+                    if self.model_type != 'fc':
+                        assert Xs[0].shape[1] == Xs[0].shape[2]
+                        self.image_size = Xs[0].shape[1]
+                    if self.model_type == 'resnet18':
+                        local_model = ResNet18(image_size=self.image_size, num_classes=self.local_output_dim)
+                    elif self.model_type == 'cnn':
+                        if self.privacy is None:
+                            local_model = CNN(n_channels=self.n_channels, image_size=Xs[party_id].shape[1],
+                                              output_dim=self.local_output_dim)
+                        else:
+                            local_model = BareSmallCNN(n_channels=self.n_channels,
+                                                       image_size=Xs[self.active_party_id].shape[1],
+                                                       output_dim=self.local_output_dim)
+                    elif self.model_type == 'fc':
+                        local_model = FC(num_features, self.local_hidden_layers, output_size=self.local_output_dim)
+                    else:
+                        raise UnsupportedModelError
+                else:
+                    raise UnsupportedTaskError
 
-                features_low = np.min(Xs[party_id], axis=0)
-                features_high = np.max(Xs[party_id], axis=0)
-        
-                local_model = SCARF(
-                    input_dim=num_features,
-                    features_low=features_low,
-                    features_high=features_high,
-                    dim_hidden_encoder=self.local_output_dim,
-                    num_hidden_encoder=3,
-                    dim_hidden_head=24,
-                    num_hidden_head=2,
-                    corruption_rate=0.6,
-                    dropout=0.1,
-                )
-            
                 # load or train local model
                 local_model_path = "cache/{}_model_{}_dim_{}.pth".format(fmt_name, party_id, self.local_output_dim)
                 if use_cache and os.path.isfile(local_model_path):
@@ -491,7 +598,7 @@ class VerticalFLModel:
                     self.local_models.append(local_model)
                 else:
                     local_model = self.train_local_party(0, party_id, Xs[party_id],
-                                                         perturb_labels[party_id, :, :], local_model)
+                                                         perturb_labels[party_id, :, :], np.expand_dims(y, axis=-1), local_model)
                     pred_labels[party_id, :, :] = self.predict_local(Xs[party_id], local_model)
 
 
@@ -554,22 +661,7 @@ class VerticalFLModel:
             num_instances = num_instances - len(noise_index)
 
         # initialize agg model
-        selected_features = []
-        if k_percent < 100:
-            passive_party_range = list(range(self.num_parties))
-            passive_party_range.remove(self.active_party_id)
-            print("passive_party_range:", passive_party_range)
-            # import pdb; pdb.set_trace()
-            Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
-            Z, selected_features = feature_selection(Z, y, k_percent, f"fedonce_active_{self.active_party_id}")
-        else:
-            passive_party_range = list(range(self.num_parties))
-            passive_party_range.remove(self.active_party_id)
-            print("passive_party_range:", passive_party_range)
-            # import pdb; pdb.set_trace()
-            Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
-
-        if self.task in ["binary_classification", "regression"] and k_percent < 100:
+        if self.task in ["binary_classification", "regression"]:
             num_features = Xs[self.active_party_id].shape[1]
             if self.model_type == 'fc':
                 active_model = FC(num_features, self.local_hidden_layers, output_size=self.local_output_dim)
@@ -591,16 +683,6 @@ class VerticalFLModel:
                                           activation=None)
             else:
                 assert False
-        elif self.task in ["binary_classification", "regression"] and k_percent == 100:
-            if self.model_type == 'fc':
-                num_features = Xs[self.active_party_id].shape[1]
-                active_model = FC(num_features, self.local_hidden_layers, output_size=self.local_output_dim)
-                self.agg_model = AggModel(mid_output_dim=self.local_output_dim,
-                                          num_parties=self.num_parties,
-                                          agg_hidden_sizes=self.agg_hidden_layers,
-                                          active_model=active_model,
-                                          output_dim=1,
-                                          activation='sigmoid')
         elif self.task in ["multi_classification"]:
             if self.model_type == 'resnet18':
                 active_model = ResNet18(image_size=self.image_size, num_classes=self.local_output_dim)
@@ -679,6 +761,7 @@ class VerticalFLModel:
             print("passive_party_range:", passive_party_range)
             # import pdb; pdb.set_trace()
             Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
+            print("Z shape before train: ", Z.shape)
             self.train_aggregation(ep, Z, Xs[self.active_party_id], y, model_optimizer)
 
             if Xs_test is not None and y_test is not None and (ep + 1) % self.test_freq == 0:
@@ -686,8 +769,8 @@ class VerticalFLModel:
                 with torch.no_grad():
                     if self.task == 'binary_classification':
                         print("Start evaluating aggregation model")
-                        y_score_train = self.predict_agg(Xs, selection_features=selected_features)
-                        y_score_test = self.predict_agg(Xs_test, selection_features=selected_features)
+                        y_score_train = self.predict_agg(Xs)
+                        y_score_test = self.predict_agg(Xs_test)
                         y_pred_train = np.where(y_score_train > 0.5, 1, 0)
                         y_pred_test = np.where(y_score_test > 0.5, 1, 0)
                         train_acc = accuracy_score(y, y_pred_train)
@@ -720,8 +803,8 @@ class VerticalFLModel:
                                                 {'train': train_auc,
                                                  'test': test_auc}, ep + 1)
                     elif self.task == 'regression':
-                        y_score_train = self.predict_agg(Xs, selection_features=selected_features)
-                        y_score_test = self.predict_agg(Xs_test, selection_features=selected_features)
+                        y_score_train = self.predict_agg(Xs)
+                        y_score_test = self.predict_agg(Xs_test)
                         train_rmse = np.sqrt(mean_squared_error(y, y_score_train))
                         test_rmse = np.sqrt(mean_squared_error(y_test, y_score_test))
                         if test_rmse < best_test_rmse:
@@ -753,7 +836,7 @@ class VerticalFLModel:
         # save aggregate model
         agg_model_path = "cache/{}_agg_model_dim_{}.pth".format(self.full_name, self.local_output_dim)
         torch.save(self.agg_model.state_dict(), agg_model_path)
-        return best_test_acc, best_test_f1, best_test_rmse, best_test_auc, selected_features
+        return best_test_acc, best_test_f1, best_test_rmse, best_test_auc
     
     def remove_noise_index(self, x, noise_index):
         x = np.delete(x, noise_index, axis=0)
@@ -761,24 +844,44 @@ class VerticalFLModel:
 
     def predict_local(self, X, model, batch_size=256):
         if self.task in ["binary_classification", "regression"]:
-            dataset = SCARFDataset(X, np.zeros(X.shape[0]))
+            X_tensor = torch.from_numpy(X).float()
+            dataset = TensorDataset(X_tensor)
+        elif self.task == "multi_classification":
+            if self.model_type == 'fc':
+                X_tensor = torch.from_numpy(X).float()
+                dataset = TensorDataset(X_tensor)
+            else:
+                transform_test = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.5, ], std=[0.5, ])
+                ])
+                dataset = ImageDataset([X], transform=transform_test)
+        else:
+            raise UnsupportedTaskError
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=self.num_workers)
-    
-        Z = self.dataset_embeddings(model, dataloader, self.device)
 
+        Z_list = []
+        with torch.no_grad():
+            model = model.to(self.device)
+            model.eval()
+            for (X_i,) in dataloader:
+                X_i = X_i.to(self.device)
+                Z_i = model(X_i)
+                Z_list.append(Z_i)
+        Z = torch.cat(Z_list).detach().cpu().numpy()
+
+        assert Z.shape[0] == X.shape[0]
         return np.float32(Z)
 
-    def predict_agg(self, Xs, selection_features = []):
+    def predict_agg(self, Xs):
         local_labels_pred = []
         for party_id in range(self.num_parties):
             if party_id != self.active_party_id:
                 X_tensor = torch.from_numpy(Xs[party_id]).float().to(self.device)
                 local_party_id = party_id if party_id < self.active_party_id else party_id - 1
-                Z_pred_i = self.local_models[local_party_id].get_embeddings(X_tensor)
+                Z_pred_i = self.local_models[local_party_id].to(self.device)(X_tensor)
                 local_labels_pred.append(Z_pred_i.detach().cpu().numpy()[None, :, :])
         local_labels_pred = np.concatenate(local_labels_pred, axis=0)
-        if len(selection_features) > 0:
-            local_labels_pred = local_labels_pred[..., selection_features]
         num_instances = local_labels_pred.shape[1]
 
         Z = local_labels_pred.transpose((1, 0, 2)).reshape(num_instances, -1)

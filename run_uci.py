@@ -94,6 +94,8 @@ def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 
 
     print("Active party {} starts training".format(active_party))
     score_list = []
+    prec_list = []
+    recall_list = []
     f1_summary = []
     kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
 
@@ -148,10 +150,14 @@ def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 
         y_test_score = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
         y_test_pred = np.where(y_test_score > 0.5, 1, 0)
         test_f1 = f1_score(y_test, y_test_pred)
+        test_prec = precision_score(y_test, y_test_pred)
+        test_recall = recall_score(y_test, y_test_pred)
 
         print("Active party {} finished training.".format(active_party))
         score_list.append(acc)
         f1_summary.append(test_f1)
+        prec_list.append(test_prec)
+        recall_list.append(test_recall)
         print(aggregate_model.params)
     
     print("Accuracy for active party {}".format(active_party) + str(score_list))
@@ -530,9 +536,9 @@ if __name__ == '__main__':
     # run_vertical_fl_noise_all_ration()
     # train_fedonce(remove_ratio = 0, active_party= 0, k_percent = 10, select_host = False)
     # train_fedonce_scarf(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
-    train_fedonce_two_side(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
+    # train_fedonce_two_side(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
     # train_fedonce_split(remove_ratio = 0, active_party= 1)
     # run_combine_all_ration()    
 #     run_vertical_fl_sup_all_ration()
     # run_combine_ft_selection_all_ration(active_party = 0)
-    # run_vertical_fl_ft_selection_all_ration(active_party = 1, select_host = False)
+    run_vertical_fl_ft_selection_all_ration(active_party = 1, select_host = False)

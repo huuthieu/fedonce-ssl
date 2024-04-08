@@ -913,9 +913,10 @@ class TransformTwice:
         return out1, out2
 
 class LocalDataset(Dataset):
-    def __init__(self, data, target, transform=None):
+    def __init__(self, data, target, cluster_label = None, transform=None):
         self.data = data
         self.target = target
+        self.cluster_label = cluster_label
         self.transform = transform
 
     def __getitem__(self, index):
@@ -923,6 +924,8 @@ class LocalDataset(Dataset):
             data_i = self.transform(self.data[index])
         else:
             data_i = self.data[index]
+        if self.cluster_label is not None:
+            return index, data_i, self.target[index], self.cluster_label[index]
         return index, data_i, self.target[index]
 
     def __len__(self):

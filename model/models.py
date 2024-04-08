@@ -134,14 +134,18 @@ class FC(nn.Module):
         self.fc_layers.append(nn.Linear(hidden_sizes[-1], output_size))
         self.ssl = False
         self.feature = False
+        self.combine_list = []
 
     def forward(self, X):
+        self.combine_list = []
         if len(list(self.fc_layers)) == 0:
             return X
 
         out = F.relu(self.fc_layers[0](X))
         for fc in self.fc_layers[1:-1]:
             out = F.relu(fc(out))
+        self.combine_list.append(out)
+
         if self.ssl or self.feature:
             return out
         if self.activation == 'sigmoid':
@@ -152,6 +156,7 @@ class FC(nn.Module):
             out = self.fc_layers[-1](out)
         else:
             assert False
+        self.combine_list.append(out)
         return out
 
 

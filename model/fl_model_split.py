@@ -6,6 +6,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision.transforms import transforms
 
+import copy
 
 from datetime import datetime
 
@@ -123,7 +124,7 @@ class VerticalFLModel:
         if local_hidden_layers is None:
             self.local_hidden_layers = [100, 100, 50]
         else:
-            self.local_hidden_layers = local_hidden_layers
+            self.local_hidden_layers = local_hidden_layers + [self.local_output_dim]
 
         self.local_models = []
         self.agg_model = None
@@ -170,23 +171,36 @@ class VerticalFLModel:
         dataset = LocalDataset(X_tensor, y_tensor)
         
         data_loader = DataLoader(dataset, batch_size=self.local_batch_size, shuffle=True,
-                                 drop_last=True, num_workers=self.num_workers,
+                                  num_workers=self.num_workers,
                                  multiprocessing_context='fork' if self.num_workers > 0 else None)
 
         bce_loss = nn.BCELoss()
         total_loss = 0.0
         num_mini_batches = 0
         gradient = []
+        if self.optimizer == 'adam':
+            optimizer = optim.Adam(model.parameters(), lr=self.local_lr, weight_decay=self.local_weight_decay)
+        elif self.optimizer == "sgd":
+            optimizer = optim.SGD(model.parameters(), lr=self.local_lr, momentum=self.momentum,
+                                  weight_decay=self.local_weight_decay)
+        elif self.optimizer == 'lamb':
+            optimizer = adv_optim.Lamb(model.parameters(), lr=self.local_lr, weight_decay=self.local_weight_decay)
+        else:
+            raise UnsupportedTaskError
+        
+        ## Copy the model
+        model_copy = copy.deepcopy(model)
+        model_copy = model_copy.to(self.device)
+
         for j, (idx, X_i, y_i) in enumerate(data_loader, 0):
             X_i = X_i.to(self.device)
             y_i = y_i.to(self.device)
-
-            X_i.requires_grad(True)
+            X_i.requires_grad = True
             optimizer.zero_grad()
 
-            y_pred = model(X_i)
+            y_pred = model_copy(X_i)
 
-            loss = loss_fn(y_pred, y_i)
+            loss = bce_loss(y_pred, y_i)
 
             total_loss += loss.item()
             loss.backward()
@@ -198,37 +212,18 @@ class VerticalFLModel:
             num_mini_batches += 1
             gradient.append(X_i.grad)
 
+        gradient = torch.cat(gradient).cpu().numpy()
+        cluster_labels = self._cluster_gradients(gradient)
+        cluster_labels = np.expand_dims(cluster_labels, axis=1)
 
         # define data and dataloader
         if self.task in ["binary_classification", "regression"]:
             X_tensor = torch.from_numpy(X).float()
             y_tensor = torch.from_numpy(y).float()  # y will be updated
             dataset = LocalDataset(X_tensor, y_tensor)
-        elif self.task in ["multi_classification"]:
-            # image classification, X is an ndarray of PIL images
-            if self.privacy is None:
-                if self.model_type == 'fc':
-                    X_tensor = torch.from_numpy(X).float()
-                    y_tensor = torch.from_numpy(y).float()  # y will be updated
-                    dataset = LocalDataset(X_tensor, y_tensor)
-                else:
-                    transform_train = transforms.Compose([
-                        transforms.ToPILImage(),
-                        transforms.RandomCrop(self.image_size, padding=self.image_size // 8),
-                        transforms.RandomHorizontalFlip(),
-                        transforms.ToTensor(),
-                        transforms.Normalize(mean=[0.5, ], std=[0.5, ])
-                    ])
-                    dataset = LocalDataset(X, y, transform=transform_train)
-            else:
-                transform_train = transforms.Compose([
-                    transforms.ToPILImage(),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean=[0.5, ], std=[0.5, ])
-                ])
-                dataset = LocalDataset(X, y, transform=transform_train)
-        else:
-            raise UnsupportedTaskError
+            cluster_labels_tensor = torch.from_numpy(cluster_labels).float()
+            dataset = LocalDataset(X_tensor, y_tensor, cluster_label=cluster_labels_tensor)
+                
         data_loader = DataLoader(dataset, batch_size=self.local_batch_size, shuffle=True,
                                  drop_last=True, num_workers=self.num_workers,
                                  multiprocessing_context='fork' if self.num_workers > 0 else None)
@@ -268,21 +263,24 @@ class VerticalFLModel:
         for i in range(self.num_local_rounds):
             start_epoch = datetime.now()
             update_targets = ((i + 1) % self.update_target_freq == 0)
-            for j, (idx, X_i, y_i) in enumerate(data_loader, 0):
+            for j, (idx, X_i, y_i, cluster_label_i) in enumerate(data_loader, 0):
                 X_i = X_i.to(self.device)
                 y_i = y_i.to(self.device)
-
+                cluster_label_i = cluster_label_i.to(self.device)
                 optimizer.zero_grad()
 
                 y_pred = model(X_i)
+                
+                y_pred, cluster_pred = model.combine_list
                 if update_targets:
                     output = y_pred.cpu().detach().numpy()
                     new_targets = calc_optimal_target_permutation(output, y_i.cpu().detach().numpy())
                     new_targets_tensor = torch.from_numpy(new_targets)
                     dataset.update_targets(idx, new_targets_tensor)
                     y_i = torch.from_numpy(new_targets).to(self.device)
-
-                loss = loss_fn(y_pred, y_i)
+                
+                # import pdb; pdb.set_trace()
+                loss = loss_fn(y_pred, y_i) * 0.5 + bce_loss(cluster_pred, cluster_label_i) * 0.5
 
                 total_loss += loss.item()
                 loss.backward()
@@ -351,9 +349,6 @@ class VerticalFLModel:
 
         return model
     
-    
-    
-
     def train_aggregation(self, ep, Z, X_active, y, optimizer, scheduler=None):
         """
         :param ep: index of epochs
@@ -559,8 +554,8 @@ class VerticalFLModel:
                 num_features = Xs[party_id].shape[1]
                 if self.task in ["binary_classification", "regression"]:
                     if self.model_type == 'fc':
-                        local_model = FC(num_features, self.local_hidden_layers, output_size=self.local_output_dim,
-                                         activation='tanh')
+                        local_model = FC(num_features, self.local_hidden_layers,
+                                         activation='sigmoid')
                     elif self.model_type == 'ncf':
                         local_model = NCF(self.ncf_counts[party_id], self.ncf_embed_dims[party_id],
                                           self.local_hidden_layers, output_size=self.local_output_dim)
@@ -864,6 +859,8 @@ class VerticalFLModel:
         with torch.no_grad():
             model = model.to(self.device)
             model.eval()
+            model.feature = True
+
             for (X_i,) in dataloader:
                 X_i = X_i.to(self.device)
                 Z_i = model(X_i)

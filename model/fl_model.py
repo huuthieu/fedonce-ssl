@@ -45,7 +45,7 @@ from sklearn.model_selection import KFold
 from sklearn.feature_selection import SelectFromModel, SelectPercentile, f_classif
 
 
-def feature_selection(x_train_val, y_train_val, k_percent, name):
+def feature_selection(x_train_val, y_train_val, k_percent, remain = False):
 
 
     # Select top k% features
@@ -57,6 +57,11 @@ def feature_selection(x_train_val, y_train_val, k_percent, name):
 
     # Get indices of selected features
     selected_feature_indices = np.where(sfm.get_support())[0]
+
+    if remain:
+        features_index = np.arange(x_train_val.shape[1])
+        remain_feature_indices = np.delete(features_index, selected_feature_indices)
+        return x_train_val_selected, remain_feature_indices
 
     return x_train_val_selected, selected_feature_indices
 
@@ -154,9 +159,7 @@ class VerticalFLModel:
         y_copy = y.copy()
         num_instances = X.shape[0]
         start_local_time = datetime.now()
-
-        import pdb; pdb.set_trace()
- 
+    
         # define data and dataloader
         if self.task in ["binary_classification", "regression"]:
             X_tensor = torch.from_numpy(X).float()

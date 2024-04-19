@@ -125,6 +125,7 @@ class VerticalFLModel:
             self.local_hidden_layers = [100, 100, 50]
         else:
             self.local_hidden_layers = local_hidden_layers + [self.local_output_dim]
+            # self.local_hidden_layers = local_hidden_layers
 
         self.local_models = []
         self.agg_model = None
@@ -220,7 +221,7 @@ class VerticalFLModel:
         if self.task in ["binary_classification", "regression"]:
             X_tensor = torch.from_numpy(X).float()
             y_tensor = torch.from_numpy(y).float()  # y will be updated
-            dataset = LocalDataset(X_tensor, y_tensor)
+            # dataset = LocalDataset(X_tensor, y_tensor)
             cluster_labels_tensor = torch.from_numpy(cluster_labels).float()
             dataset = LocalDataset(X_tensor, y_tensor, cluster_label=cluster_labels_tensor)
                 
@@ -264,23 +265,27 @@ class VerticalFLModel:
             start_epoch = datetime.now()
             update_targets = ((i + 1) % self.update_target_freq == 0)
             for j, (idx, X_i, y_i, cluster_label_i) in enumerate(data_loader, 0):
+            # for j, (idx, X_i, y_i) in enumerate(data_loader, 0):
                 X_i = X_i.to(self.device)
                 y_i = y_i.to(self.device)
                 cluster_label_i = cluster_label_i.to(self.device)
                 optimizer.zero_grad()
 
-                y_pred = model(X_i)
-                
+                # y_pred = model(X_i)
+                model(X_i)
+                # y_pred = model.combine_list[0]
                 y_pred, cluster_pred = model.combine_list
-                if update_targets:
-                    output = y_pred.cpu().detach().numpy()
-                    new_targets = calc_optimal_target_permutation(output, y_i.cpu().detach().numpy())
-                    new_targets_tensor = torch.from_numpy(new_targets)
-                    dataset.update_targets(idx, new_targets_tensor)
-                    y_i = torch.from_numpy(new_targets).to(self.device)
+                # if update_targets:
+                #     output = y_pred.cpu().detach().numpy()
+                #     new_targets = calc_optimal_target_permutation(output, y_i.cpu().detach().numpy())
+                #     new_targets_tensor = torch.from_numpy(new_targets)
+                #     dataset.update_targets(idx, new_targets_tensor)
+                #     y_i = torch.from_numpy(new_targets).to(self.device)
                 
                 # import pdb; pdb.set_trace()
-                loss = loss_fn(y_pred, y_i) * 0.5 + bce_loss(cluster_pred, cluster_label_i) * 0.5
+                loss = 0
+                # loss += loss_fn(y_pred, y_i) * 1 
+                loss += bce_loss(cluster_pred, cluster_label_i) * 1
 
                 total_loss += loss.item()
                 loss.backward()
@@ -556,6 +561,8 @@ class VerticalFLModel:
                     if self.model_type == 'fc':
                         local_model = FC(num_features, self.local_hidden_layers,
                                          activation='sigmoid')
+                        # local_model = FC(num_features, self.local_hidden_layers, output_size=self.local_output_dim,
+                        #                  activation='tanh')
                     elif self.model_type == 'ncf':
                         local_model = NCF(self.ncf_counts[party_id], self.ncf_embed_dims[party_id],
                                           self.local_hidden_layers, output_size=self.local_output_dim)

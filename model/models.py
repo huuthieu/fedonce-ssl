@@ -142,8 +142,9 @@ class FC(nn.Module):
             return X
 
         out = F.relu(self.fc_layers[0](X))
-        for fc in self.fc_layers[1:-1]:
+        for fc in self.fc_layers[1:-2]:
             out = F.relu(fc(out))
+        out = torch.tanh(self.fc_layers[-2](out))
         self.combine_list.append(out)
 
         if self.ssl or self.feature:

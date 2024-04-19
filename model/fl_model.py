@@ -61,6 +61,7 @@ def feature_selection(x_train_val, y_train_val, k_percent, remain = False):
     if remain:
         features_index = np.arange(x_train_val.shape[1])
         remain_feature_indices = np.delete(features_index, selected_feature_indices)
+        x_train_val_selected = x_train_val[:, remain_feature_indices]
         return x_train_val_selected, remain_feature_indices
 
     return x_train_val_selected, selected_feature_indices
@@ -281,8 +282,6 @@ class VerticalFLModel:
         assert is_perturbation(y, y_copy)
         return model
     
-    
-    
 
     def train_aggregation(self, ep, Z, X_active, y, optimizer, scheduler=None):
         """
@@ -413,7 +412,8 @@ class VerticalFLModel:
 
             assert is_perturbation(Z_copy, Z)
 
-    def train(self, Xs, y, Xs_test=None, y_test=None, use_cache=False, noise_index = [], k_percent = 100):
+    def train(self, Xs, y, Xs_test=None, y_test=None, use_cache=False, noise_index = [], 
+              k_percent = 100, remain_selection = False):
         if use_cache and not os.path.isdir('cache'):
             os.mkdir('cache')
         num_instances = Xs[0].shape[0]
@@ -591,14 +591,21 @@ class VerticalFLModel:
             num_instances = num_instances - len(noise_index)
 
         # initialize agg model
-
+        selected_features = []
         if k_percent < 100:
             passive_party_range = list(range(self.num_parties))
             passive_party_range.remove(self.active_party_id)
             print("passive_party_range:", passive_party_range)
             # import pdb; pdb.set_trace()
             Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
-            Z, selected_features = feature_selection(Z, y, k_percent, f"fedonce_active_{self.active_party_id}")
+            Z, selected_features = feature_selection(Z, y, k_percent, remain_selection)
+
+        else:
+            passive_party_range = list(range(self.num_parties))
+            passive_party_range.remove(self.active_party_id)
+            print("passive_party_range:", passive_party_range)
+            # import pdb; pdb.set_trace()
+            Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
 
         if self.task in ["binary_classification", "regression"]:
             num_features = Xs[self.active_party_id].shape[1]

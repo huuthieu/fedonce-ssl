@@ -6,6 +6,8 @@ import os
 from os import listdir
 from os.path import isfile, join
 import matplotlib.pyplot as plt
+import heapq
+
 
 # Create an argument parser
 parser = argparse.ArgumentParser(description="Process log file and extract F1 scores.")
@@ -93,9 +95,17 @@ def uci_log():
     
     pattern = re.compile(r".*F1 mean=\d+(\.\d+)?,.*$")
 
+#     pattern = re.compile(r".*Accuracy mean=\d+(\.\d+)?,.*$")
+    
+    res = {}
     for text in data:
         if pattern.match(text):
             print(text)
+#             key = re.findall(r"mean=([0-9]+\.[0-9]+)", text)[0]
+#             res[key] =  text
+#     largest_f1 = heapq.nlargest(10, res)
+#     for key in largest_f1:
+#         print(key, res[key])
 
 def plot_ucilog():
 

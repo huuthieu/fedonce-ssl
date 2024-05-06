@@ -83,14 +83,16 @@ def feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, name)
     return x_train_val_selected, x_test_selected
 
 ## FedOnce
-def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 0, k_percent = 100, select_host = True):
+def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 0, k_percent = 100,  k1_percent = 100, select_host = True,
+                  remain_selection = False):
     num_parties = 2
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=None,
                                                         feature_ratio_beta = beta, noise_ratio = noise_ratio)
 
-    if k_percent < 100 and select_host:
+    if k_percent < 100 and True:
         xs_train_val[active_party], xs_test[active_party] = feature_selection(xs_train_val[active_party], y_train_val, xs_test[active_party], y_test, k_percent, f"fedonce_active_{active_party}")
 
+    # xs_train_val[active_party], xs_test[active_party] = feature_selection(xs_train_val[active_party], y_train_val, xs_test[active_party], y_test, 60, f"fedonce_active_{active_party}")
 
     print("Active party {} starts training".format(active_party))
     score_list = []
@@ -143,10 +145,12 @@ def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 
             delta=1.0/xs_train[0].shape[0]
         )
         selected_features = []
-        if select_host == False and k_percent < 100:
-            acc, _, _, _, selected_features  = aggregate_model.train(xs_train, y_train, xs_val, y_val, k_percent = k_percent)
+        if False == False and k1_percent < 100:
+            acc, _, _, _, selected_features  = aggregate_model.train(xs_train, y_train, xs_val, y_val, k_percent = k1_percent,
+                                                                    remain_selection = remain_selection)
         else:
-            acc, _, _, _  = aggregate_model.train(xs_train, y_train, xs_val, y_val)
+            acc, _, _, _ , _ = aggregate_model.train(xs_train, y_train, xs_val, y_val)
+        
         y_test_score = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
         y_test_pred = np.where(y_test_score > 0.5, 1, 0)
         test_f1 = f1_score(y_test, y_test_pred)
@@ -165,12 +169,20 @@ def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 
     
     mean = np.mean(score_list)
     std = np.std(score_list)
-    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}, noise_ratio {:.1f}, k_percent {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}, noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean, std)
     print(out)
 
-    mean = np.mean(f1_summary)
-    std = np.std(f1_summary)
-    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean, std)
+    mean_f1 = np.mean(f1_summary)
+    std_f1 = np.std(f1_summary)
+
+    mean_prec = np.mean(prec_list)
+    std_prec = np.std(prec_list)
+
+    mean_recall = np.mean(recall_list)
+    std_recall = np.std(recall_list)
+
+    # out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: F1 mean={}, std={}, prec mean={}, std={}, recall mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean_f1, std_f1, mean_prec, std_prec, mean_recall, std_recall)
     print(out)
     return mean, std
 
@@ -182,6 +194,9 @@ def train_fedonce_split(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ra
     print("Active party {} starts training".format(active_party))
     score_list = []
     f1_summary = []
+    prec_list = []
+    recall_list = []
+
     kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
 
     for i, (train_idx, val_idx) in enumerate(kfold):
@@ -521,10 +536,10 @@ def run_combine_ft_selection_all_ration(active_party):
     ratios = np.arange(0.1, 1.0, 0.1)
     Parallel(n_jobs=6)(delayed(train_combine)(active_party = active_party, k_percent = ratio*100) for ratio in ratios)
 
-def run_vertical_fl_ft_selection_all_ration(active_party, select_host = True):
+def run_vertical_fl_ft_selection_all_ration(active_party, select_host = True, remain = False, k1_percent = 100):
     ratios = np.arange(0.1, 1.0, 0.1)
-    Parallel(n_jobs=6)(delayed(train_fedonce)(active_party = active_party, k_percent = ratio*100, 
-                                                  select_host= select_host) for ratio in ratios)
+    Parallel(n_jobs=6)(delayed(train_fedonce)(active_party = active_party, k_percent = ratio*100, k1_percent = k1_percent,
+                                                  select_host= select_host, remain_selection = remain) for ratio in ratios)
 
 if __name__ == '__main__':
     # importance = get_feature_importance_uci()
@@ -534,11 +549,15 @@ if __name__ == '__main__':
     # run_vertical_fl_all_ration()
     # run_vertical_fl_split_all_ration()
     # run_vertical_fl_noise_all_ration()
-    # train_fedonce(remove_ratio = 0, active_party= 0, k_percent = 10, select_host = False)
+    # train_fedonce(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
     # train_fedonce_scarf(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
     # train_fedonce_two_side(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
     # train_fedonce_split(remove_ratio = 0, active_party= 1)
     # run_combine_all_ration()    
 #     run_vertical_fl_sup_all_ration()
     # run_combine_ft_selection_all_ration(active_party = 0)
-    run_vertical_fl_ft_selection_all_ration(active_party = 1, select_host = False)
+    # run_vertical_fl_ft_selection_all_ration(active_party = 1, select_host = True)
+    for k in range(1, 10):
+        print(">>>>>>>>>>>>>>>>")
+        print("Vlaue of k: ", k)
+        run_vertical_fl_ft_selection_all_ration(active_party = 0, select_host = False, remain=False, k1_percent = k*10)

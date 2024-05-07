@@ -185,7 +185,7 @@ class VerticalFLModel:
         return embeddings
 
 
-    def train_local_party(self, ep, party_id, X, y, model):
+    def train_local_party(self, ep, party_id, X, y):
         """
         Train one local party
         :param ep: index of epochs
@@ -200,9 +200,9 @@ class VerticalFLModel:
             y = y.todense()
 
         X_df = pd.DataFrame(X)
-        dae = DAE()
+        dae = DAE(device='cuda:0')
         dae.fit(X_df, max_epochs=self.num_local_rounds, batch_size=self.local_batch_size, verbose=1)
-
+        import pdb; pdb.set_trace()
 
         return dae
 
@@ -409,21 +409,6 @@ class VerticalFLModel:
             if party_id != self.active_party_id:
                 # initialize local model
                 num_features = Xs[party_id].shape[1]
-
-                features_low = np.min(Xs[party_id], axis=0)
-                features_high = np.max(Xs[party_id], axis=0)
-        
-                local_model = SCARF(
-                    input_dim=num_features,
-                    features_low=features_low,
-                    features_high=features_high,
-                    dim_hidden_encoder=self.local_output_dim,
-                    num_hidden_encoder=3,
-                    dim_hidden_head=24,
-                    num_hidden_head=2,
-                    corruption_rate=0.6,
-                    dropout=0.1,
-                )
             
                 # load or train local model
                 local_model_path = "cache/{}_model_{}_dim_{}.pth".format(fmt_name, party_id, self.local_output_dim)
@@ -436,7 +421,7 @@ class VerticalFLModel:
                     self.local_models.append(local_model)
                 else:
                     local_model = self.train_local_party(0, party_id, Xs[party_id],
-                                                         perturb_labels[party_id, :, :], local_model)
+                                                         perturb_labels[party_id, :, :])
                     pred_labels[party_id, :, :] = self.predict_local(Xs[party_id], local_model)
 
 

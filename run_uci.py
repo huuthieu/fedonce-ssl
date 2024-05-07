@@ -5,6 +5,7 @@ from model.fl_model_sup import VerticalFLModel as VerticalFLModelSup
 from model.fl_model_scarf import VerticalFLModel as VerticalFLModelScarf
 from model.fl_model_two_side import VerticalFLModel as VerticalFLModelTwoSide
 from model.fl_model_split import VerticalFLModel as VerticalFLModelSplit
+from model.fl_model_dae import VerticalFLModel as VerticalFLModelDae
 from model.single_party_model import SingleParty
 from model.split_nn_model import SplitNNModel
 from model.models import FC
@@ -375,10 +376,10 @@ def train_fedonce_dae(remove_ratio = 0, active_party = 1, beta = 0.5, noise_rati
         y_val = y_train_val[val_idx]
         print("Train shape: {}".format(xs_train[0].shape))
         print("Val shape: {}".format(xs_val[0].shape))
-        model_name = "vertical_fl_scarf_uci_party_{}_fold_{}".format(num_parties, i)
+        model_name = "vertical_fl_dae_uci_party_{}_fold_{}".format(num_parties, i)
         name = "{}_active_{}".format(model_name, active_party)
         writer = SummaryWriter("runs/{}".format(name))
-        aggregate_model = VerticalFLModelScarf(
+        aggregate_model = VerticalFLModelDae(
             num_parties=num_parties,
             active_party_id=active_party,
             name=model_name,
@@ -388,7 +389,7 @@ def train_fedonce_dae(remove_ratio = 0, active_party = 1, beta = 0.5, noise_rati
             local_hidden_layers=[50, 30],
             local_batch_size=100,
             local_weight_decay=1e-5,
-            local_output_size=10,
+            local_output_size=384,
             num_agg_rounds=1,
             agg_lr=1e-4,
             agg_hidden_layers=[10],
@@ -638,11 +639,12 @@ if __name__ == '__main__':
     # train_fedonce_scarf(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
     # train_fedonce_two_side(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
     # train_fedonce_split(remove_ratio = 0, active_party= 1)
+    train_fedonce_dae(remove_ratio = 0, active_party= 1)
     # run_combine_all_ration()    
 #     run_vertical_fl_sup_all_ration()
     # run_combine_ft_selection_all_ration(active_party = 0)
     # run_vertical_fl_ft_selection_all_ration(active_party = 1, select_host = True)
-    for k in range(1, 10):
-        print(">>>>>>>>>>>>>>>>")
-        print("Vlaue of k: ", k)
-        run_vertical_fl_ft_selection_all_ration(active_party = 0, select_host = False, remain=False, k1_percent = k*10)
+    # for k in range(1, 10):
+        # print(">>>>>>>>>>>>>>>>")
+        # print("Vlaue of k: ", k)
+        # run_vertical_fl_ft_selection_all_ration(active_party = 0, select_host = False, remain=False, k1_percent = k*10)

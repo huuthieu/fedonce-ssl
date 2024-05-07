@@ -352,6 +352,91 @@ def train_fedonce_scarf(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ra
     print(out)
     return mean, std
 
+##
+def train_fedonce_dae(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 0, k_percent = 100, select_host = True):
+    num_parties = 2
+    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=None,
+                                                        feature_ratio_beta = beta, noise_ratio = noise_ratio)
+
+    if k_percent < 100 and select_host:
+        xs_train_val[active_party], xs_test[active_party] = feature_selection(xs_train_val[active_party], y_train_val, xs_test[active_party], y_test, k_percent, f"fedonce_active_{active_party}")
+
+
+    print("Active party {} starts training".format(active_party))
+    score_list = []
+    f1_summary = []
+    kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
+
+    for i, (train_idx, val_idx) in enumerate(kfold):
+        print("Cross Validation Fold {}".format(i))
+        xs_train = [data[train_idx] for data in xs_train_val]
+        y_train = y_train_val[train_idx]
+        xs_val = [data[val_idx] for data in xs_train_val]
+        y_val = y_train_val[val_idx]
+        print("Train shape: {}".format(xs_train[0].shape))
+        print("Val shape: {}".format(xs_val[0].shape))
+        model_name = "vertical_fl_scarf_uci_party_{}_fold_{}".format(num_parties, i)
+        name = "{}_active_{}".format(model_name, active_party)
+        writer = SummaryWriter("runs/{}".format(name))
+        aggregate_model = VerticalFLModelScarf(
+            num_parties=num_parties,
+            active_party_id=active_party,
+            name=model_name,
+            num_epochs=100,
+            num_local_rounds=100,
+            local_lr=3e-4,
+            local_hidden_layers=[50, 30],
+            local_batch_size=100,
+            local_weight_decay=1e-5,
+            local_output_size=10,
+            num_agg_rounds=1,
+            agg_lr=1e-4,
+            agg_hidden_layers=[10],
+            agg_batch_size=100,
+            agg_weight_decay=1e-4,
+            writer=writer,
+            device='cuda:0',
+            update_target_freq=1,
+            task='binary_classification',
+            n_classes=10,
+            test_batch_size=1000,
+            test_freq=1,
+            cuda_parallel=False,
+            n_channels=1,
+            model_type='fc',
+            optimizer='adam',
+            privacy=None,
+            batches_per_lot=5,
+            epsilon=1,
+            delta=1.0/xs_train[0].shape[0]
+        )
+        selected_features = []
+        if select_host == False and k_percent < 100:
+            acc, _, _, _, selected_features  = aggregate_model.train(xs_train, y_train, xs_val, y_val, k_percent = k_percent)
+        else:
+            acc, _, _, _, _  = aggregate_model.train(xs_train, y_train, xs_val, y_val)
+        y_test_score = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
+        y_test_pred = np.where(y_test_score > 0.5, 1, 0)
+        test_f1 = f1_score(y_test, y_test_pred)
+
+        print("Active party {} finished training.".format(active_party))
+        score_list.append(acc)
+        f1_summary.append(test_f1)
+        print(aggregate_model.params)
+    
+    print("Accuracy for active party {}".format(active_party) + str(score_list))
+    print("F1 for active party {} with: {}".format(active_party, str(f1_summary)))
+    
+    mean = np.mean(score_list)
+    std = np.std(score_list)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}, noise_ratio {:.1f}, k_percent {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean, std)
+    print(out)
+
+    mean = np.mean(f1_summary)
+    std = np.std(f1_summary)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean, std)
+    print(out)
+    return mean, std
 
 ## FedOnce Two Side
 def train_fedonce_two_side(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 0, k_percent = 100, select_host = True):

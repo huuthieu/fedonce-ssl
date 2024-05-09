@@ -123,7 +123,7 @@ def train_fedonce(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 
             local_hidden_layers=[50, 30],
             local_batch_size=100,
             local_weight_decay=1e-5,
-            local_output_size=10,
+            local_output_size=384,
             num_agg_rounds=1,
             agg_lr=1e-4,
             agg_hidden_layers=[10],
@@ -297,8 +297,8 @@ def train_fedonce_scarf(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ra
             num_parties=num_parties,
             active_party_id=active_party,
             name=model_name,
-            num_epochs=100,
-            num_local_rounds=100,
+            num_epochs=200,
+            num_local_rounds=200,
             local_lr=3e-4,
             local_hidden_layers=[50, 30],
             local_batch_size=100,
@@ -366,6 +366,8 @@ def train_fedonce_dae(remove_ratio = 0, active_party = 1, beta = 0.5, noise_rati
     print("Active party {} starts training".format(active_party))
     score_list = []
     f1_summary = []
+    prec_list = []
+    recall_list = []
     kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
 
     for i, (train_idx, val_idx) in enumerate(kfold):
@@ -389,7 +391,7 @@ def train_fedonce_dae(remove_ratio = 0, active_party = 1, beta = 0.5, noise_rati
             local_hidden_layers=[50, 30],
             local_batch_size=100,
             local_weight_decay=1e-5,
-            local_output_size=384,
+            local_output_size=48,
             num_agg_rounds=1,
             agg_lr=1e-4,
             agg_hidden_layers=[10],
@@ -419,10 +421,14 @@ def train_fedonce_dae(remove_ratio = 0, active_party = 1, beta = 0.5, noise_rati
         y_test_score = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
         y_test_pred = np.where(y_test_score > 0.5, 1, 0)
         test_f1 = f1_score(y_test, y_test_pred)
+        test_prec = precision_score(y_test, y_test_pred)
+        test_recall = recall_score(y_test, y_test_pred)
 
         print("Active party {} finished training.".format(active_party))
         score_list.append(acc)
         f1_summary.append(test_f1)
+        prec_list.append(test_prec)
+        recall_list.append(test_recall)
         print(aggregate_model.params)
     
     print("Accuracy for active party {}".format(active_party) + str(score_list))
@@ -433,9 +439,18 @@ def train_fedonce_dae(remove_ratio = 0, active_party = 1, beta = 0.5, noise_rati
     out = "Party {}, remove_ratio {:.1f}, beta {:.1f}, noise_ratio {:.1f}, k_percent {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean, std)
     print(out)
 
-    mean = np.mean(f1_summary)
-    std = np.std(f1_summary)
-    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean, std)
+    mean_f1 = np.mean(f1_summary)
+    std_f1 = np.std(f1_summary)
+
+    mean_prec = np.mean(prec_list)
+    std_prec = np.std(prec_list)
+
+    mean_recall = np.mean(recall_list)
+    std_recall = np.std(recall_list)
+
+    # out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}: F1 mean={}, std={}, prec mean={}, std={}, recall mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, mean_f1, std_f1, mean_prec, std_prec, mean_recall, std_recall)
+
     print(out)
     return mean, std
 

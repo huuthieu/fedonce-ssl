@@ -173,17 +173,6 @@ class VerticalFLModel:
         return epoch_loss / len(train_loader.dataset)
 
 
-    def dataset_embeddings(self, model, loader, device):
-        embeddings = []
-
-        for x in tqdm(loader):
-            x = x.to(device)
-            embeddings.append(model.get_embeddings(x))
-
-        embeddings = torch.cat(embeddings).cpu().numpy()
-
-        return embeddings
-
 
     def train_local_party(self, ep, party_id, X, y):
         """
@@ -200,9 +189,9 @@ class VerticalFLModel:
             y = y.todense()
 
         X_df = pd.DataFrame(X)
-        dae = DAE(device='cuda:0')
+        dae = DAE(device='cuda:0', body_network_cfg=dict(hidden_size=16))
         dae.fit(X_df, max_epochs=self.num_local_rounds, batch_size=self.local_batch_size, verbose=1)
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
 
         return dae
 
@@ -700,10 +689,10 @@ class VerticalFLModel:
         local_labels_pred = []
         for party_id in range(self.num_parties):
             if party_id != self.active_party_id:
-                X_tensor = torch.from_numpy(Xs[party_id]).float().to(self.device)
+                X_tensor = pd.DataFrame(Xs[party_id])
                 local_party_id = party_id if party_id < self.active_party_id else party_id - 1
-                Z_pred_i = self.local_models[local_party_id].get_embeddings(X_tensor)
-                local_labels_pred.append(Z_pred_i.detach().cpu().numpy()[None, :, :])
+                Z_pred_i = self.local_models[local_party_id].transform(X_tensor)
+                local_labels_pred.append(Z_pred_i[None, :, :])
         local_labels_pred = np.concatenate(local_labels_pred, axis=0)
         if len(selection_features) > 0:
             local_labels_pred = local_labels_pred[..., selection_features]
@@ -820,12 +809,12 @@ class VerticalFLModel:
 
     def chmod(self, mode):
         if mode == 'eval':
-            for model in self.local_models:
-                model.eval()
+            # for model in self.local_models:
+            #     model.eval()
             self.agg_model.eval()
         elif mode == 'train':
-            for model in self.local_models:
-                model.train()
+            # for model in self.local_models:
+                # model.train()
             self.agg_model.train()
         else:
             raise UnsupportedModeError

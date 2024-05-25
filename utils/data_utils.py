@@ -645,7 +645,7 @@ def load_nus_wide(path, download=True, label_type='airport', use_cache=True, bal
 
 def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0, 
              feature_order = None, feature_ratio_beta = None, 
-             noise_ratio = 0, active_party = 0):
+             noise_ratio = 0, active_party = 0, random_state = 10):
     df = pd.read_csv('data/uci/default_of_credit_card_clients.csv', index_col='ID')
     df.rename(columns={'default payment next month':'DEFAULT'}, inplace=True)
     df.rename(columns={'PAY_0': 'PAY_1'}, inplace=True)
@@ -693,7 +693,7 @@ def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0,
     X_train_std = X_train_std.to_numpy()
     X_test_std = X_test_std.to_numpy()
 
-    rng = np.random.RandomState(10)
+    rng = np.random.RandomState(random_state)
 
     # Tạo một chỉ số hoán đổi
     permutation_indices = rng.permutation(X_train_std.shape[1])

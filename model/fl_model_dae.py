@@ -187,12 +187,13 @@ class VerticalFLModel:
             X = X.todense()
         if isinstance(y, csr_matrix):
             y = y.todense()
-
+        
+        model_checkpoint = f"cache/{self.name}_party_{party_id}_model.pth"
         X_df = pd.DataFrame(X)
         dae = DAE(device='cuda:0', body_network_cfg=dict(hidden_size=16))
-        dae.fit(X_df, max_epochs=self.num_local_rounds, batch_size=self.local_batch_size, verbose=1)
-        # import pdb; pdb.set_trace()
 
+        dae.fit(X_df, max_epochs=self.num_local_rounds, batch_size=self.local_batch_size, model_checkpoint = model_checkpoint, verbose=1)
+    
         return dae
 
     def train_aggregation(self, ep, Z, X_active, y, optimizer, scheduler=None):

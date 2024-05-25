@@ -101,11 +101,20 @@ def uci_log():
     for text in data:
         if pattern.match(text):
             print(text)
+            
+    pattern = re.compile(r".*Accuracy mean=\d+(\.\d+)?,.*$")
+    
+    res = {}
+    for text in data:
+        if pattern.match(text):
+            print(text)
+            
 #             key = re.findall(r"mean=([0-9]+\.[0-9]+)", text)[0]
 #             res[key] =  text
 #     largest_f1 = heapq.nlargest(10, res)
 #     for key in largest_f1:
 #         print(key, res[key])
+    
 
 def plot_ucilog():
 

@@ -189,6 +189,211 @@ def train_fedonce(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 
     print(out)
     return mean_acc, mean_f1, mean_prec, mean_recall
 
+
+## FedOnce multi round
+def train_fedonce_multi_round(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 0, k_percent = 100,  k1_percent = 100, select_host = True,
+                  remain_selection = False, random_state = 10):
+    num_parties = 2
+    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=None,
+                                                        feature_ratio_beta = beta, noise_ratio = noise_ratio,
+                                                        random_state = random_state
+                                                        )
+
+    if k_percent < 100 and True:
+        xs_train_val[active_party], xs_test[active_party] = feature_selection(xs_train_val[active_party], y_train_val, xs_test[active_party], y_test, k_percent, f"fedonce_active_{active_party}")
+
+    # xs_train_val[active_party], xs_test[active_party] = feature_selection(xs_train_val[active_party], y_train_val, xs_test[active_party], y_test, 60, f"fedonce_active_{active_party}")
+
+    print("Active party {} starts training".format(active_party))
+    score_list = []
+    prec_list = []
+    recall_list = []
+    f1_summary = []
+    kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
+
+    for i, (train_idx, val_idx) in enumerate(kfold):
+        print("Cross Validation Fold {}".format(i))
+        xs_train = [data[train_idx] for data in xs_train_val]
+        y_train = y_train_val[train_idx]
+        xs_val = [data[val_idx] for data in xs_train_val]
+        y_val = y_train_val[val_idx]
+        print("Train shape: {}".format(xs_train[0].shape))
+        print("Val shape: {}".format(xs_val[0].shape))
+        model_name = "vertical_fl_phishing_party_{}_fold_{}".format(num_parties, i)
+        name = "{}_active_{}".format(model_name, active_party)
+        writer = SummaryWriter("runs/{}".format(name))
+        aggregate_model = VerticalFLModel(
+            num_parties=num_parties,
+            active_party_id=active_party,
+            name=model_name,
+            num_epochs=1,
+            num_local_rounds=1,
+            local_lr=3e-4,
+            local_hidden_layers=[50, 30],
+            local_batch_size=100,
+            local_weight_decay=1e-5,
+            local_output_size=48,
+            num_agg_rounds=1,
+            agg_lr=1e-4,
+            agg_hidden_layers=[10],
+            agg_batch_size=100,
+            agg_weight_decay=1e-4,
+            writer=writer,
+            device='cuda:0',
+            update_target_freq=1,
+            task='binary_classification',
+            n_classes=10,
+            test_batch_size=1000,
+            test_freq=1,
+            cuda_parallel=False,
+            n_channels=1,
+            model_type='fc',
+            optimizer='adam',
+            privacy=None,
+            batches_per_lot=5,
+            epsilon=1,
+            delta=1.0/xs_train[0].shape[0]
+        )
+        selected_features = []
+        if False == False and k1_percent < 100:
+            acc, _, _, _, selected_features  = aggregate_model.train(xs_train, y_train, xs_val, y_val, k_percent = k1_percent,
+                                                                    remain_selection = remain_selection)
+        else:
+            acc, _, _, _ , _ = aggregate_model.train(xs_train, y_train, xs_val, y_val)
+        
+        y_test_score = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
+        y_test_pred = np.where(y_test_score > 0.5, 1, 0)
+        test_f1 = f1_score(y_test, y_test_pred)
+        test_prec = precision_score(y_test, y_test_pred)
+        test_recall = recall_score(y_test, y_test_pred)
+
+        print("Active party {} finished training.".format(active_party))
+        score_list.append(acc)
+        f1_summary.append(test_f1)
+        prec_list.append(test_prec)
+        recall_list.append(test_recall)
+        print(aggregate_model.params)
+    
+    print("Accuracy for active party {}".format(active_party) + str(score_list))
+    print("F1 for active party {} with: {}".format(active_party, str(f1_summary)))
+    
+    mean_acc = np.mean(score_list)
+    std = np.std(score_list)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}, noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean_acc, std)
+    print(out)
+
+    mean_f1 = np.mean(f1_summary)
+    std_f1 = np.std(f1_summary)
+
+    mean_prec = np.mean(prec_list)
+    std_prec = np.std(prec_list)
+
+    mean_recall = np.mean(recall_list)
+    std_recall = np.std(recall_list)
+
+    # out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: F1 mean={}, std={}, prec mean={}, std={}, recall mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean_f1, std_f1, mean_prec, std_prec, mean_recall, std_recall)
+    print(out)
+
+    # post fedOnce
+    num_parties = 2
+    xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=None,
+                                                        feature_ratio_beta = beta, noise_ratio = noise_ratio,
+                                                        random_state = random_state
+                                                        )
+    score_list = []
+    prec_list = []
+    recall_list = []
+    f1_summary = []
+    kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
+
+    print("Starts training")
+    
+    for i, (train_idx, val_idx) in enumerate(kfold):
+        print("Cross Validation Fold {}".format(i))
+        xs_train = [data[train_idx] for data in xs_train_val]
+        y_train = y_train_val[train_idx]
+        xs_val = [data[val_idx] for data in xs_train_val]
+        y_val = y_train_val[val_idx]
+        print("Train shape: {}".format(xs_train[0].shape))
+        print("Val shape: {}".format(xs_val[0].shape))
+        model_name = "post_vertical_fl_phishing_party_{}_fold_{}".format(num_parties, i)
+        name = "{}_active_{}".format(model_name, active_party)
+        writer = SummaryWriter("runs/{}".format(name))
+        
+        cache_local_name = "vertical_fl_phishing_party_{}_fold_{}".format(num_parties, i)
+        cache_agg_name = "{}_active_{}".format(cache_local_name, active_party)
+        
+
+        aggregate_model = SplitNNModel(
+            num_parties=num_parties,
+            name=model_name,
+            num_epochs=1,
+            local_hidden_layers=[50, 30],
+            local_output_size=48,
+            lr=3e-4,
+            agg_hidden_layers=[10],
+            batch_size=100,
+            weight_decay=1e-5,
+            writer=writer,
+            device='cuda:0',
+            update_target_freq=1,
+            task='binary_classification',
+            n_classes=10,
+            test_batch_size=1000,
+            test_freq=1,
+            cuda_parallel=False,
+            n_channels=1,
+            model_type='fc',
+            optimizer='adam',
+            privacy=None,
+            batches_per_lot=5,
+            epsilon=1,
+            delta=1.0/xs_train[0].shape[0],
+            num_workers=2,
+            cache_local_name=cache_local_name,
+            cache_agg_name=cache_agg_name,
+            active_party=active_party
+        )
+
+        acc, _, _, _ , _ = aggregate_model.train(xs_train, y_train, xs_val, y_val)
+        
+        y_test_score = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
+        y_test_pred = np.where(y_test_score > 0.5, 1, 0)
+        test_f1 = f1_score(y_test, y_test_pred)
+        test_prec = precision_score(y_test, y_test_pred)
+        test_recall = recall_score(y_test, y_test_pred)
+
+        print("Active party {} finished training.".format(active_party))
+        score_list.append(acc)
+        f1_summary.append(test_f1)
+        prec_list.append(test_prec)
+        recall_list.append(test_recall)
+        print(aggregate_model.params)
+    
+    print("Accuracy for active party {}".format(active_party) + str(score_list))
+    print("F1 for active party {} with: {}".format(active_party, str(f1_summary)))
+    
+    mean_acc = np.mean(score_list)
+    std = np.std(score_list)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}, noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean_acc, std)
+    print(out)
+
+    mean_f1 = np.mean(f1_summary)
+    std_f1 = np.std(f1_summary)
+
+    mean_prec = np.mean(prec_list)
+    std_prec = np.std(prec_list)
+
+    mean_recall = np.mean(recall_list)
+    std_recall = np.std(recall_list)
+
+    # out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean, std)
+    out = "Post Fed Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: F1 mean={}, std={}, prec mean={}, std={}, recall mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean_f1, std_f1, mean_prec, std_prec, mean_recall, std_recall)
+    print(out)
+
+    return mean_acc, mean_f1, mean_prec, mean_recall
+
 ## FedOnce Split
 def train_fedonce_split(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ratio = 0):
     num_parties = 2
@@ -676,7 +881,7 @@ if __name__ == '__main__':
     # run_vertical_fl_all_ration()
     # run_vertical_fl_split_all_ration()
     # run_vertical_fl_noise_all_ration()
-    # train_fedonce(remove_ratio = 0, active_party= 0)
+    train_fedonce(remove_ratio = 0, active_party= 1)
     # train_fedonce_scarf(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
     # train_fedonce_two_side(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
     # train_fedonce_split(remove_ratio = 0, active_party= 1)
@@ -692,4 +897,5 @@ if __name__ == '__main__':
     
     # run_vertical_fl_multiple_seed()
 
-    run_vertical_fl_dae_multiple_seed()
+    # run_vertical_fl_dae_multiple_seed()
+    # train_fedonce_multi_round(remove_ratio=0, active_party=0)

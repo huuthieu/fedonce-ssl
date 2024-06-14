@@ -112,7 +112,7 @@ class SplitNNModel:
     def mse_loss(x, y):
         return torch.mean(torch.sum((x - y) ** 2, dim=1))
 
-    def train(self, Xs, y, Xs_val=None, y_val=None, Xs_test=None, y_test=None, use_cache=False):
+    def train(self, Xs, y, Xs_test=None, y_test=None, use_cache=False):
         if use_cache and not os.path.isdir('cache'):
             os.mkdir('cache')
 
@@ -245,10 +245,9 @@ class SplitNNModel:
             raise UnsupportedOptimizerError
 
         # training
-        best_val_acc = 0.0
-        best_val_f1 = 0.0
-        best_val_auc = 0.0
-        best_val_rmse = np.inf
+        best_test_acc = 0.0
+        best_test_f1 = 0.0
+        best_test_auc = 0.0
         self.comm_size = 0
         best_test_acc = 0.0
         best_test_rmse = np.inf
@@ -303,84 +302,79 @@ class SplitNNModel:
                 self.writer.add_scalar('Aggregation training loss', total_loss / num_batches, ep + 1)
 
             # test model
-            if Xs_val is not None and y_val is not None and (ep + 1) % self.test_freq == 0:
+            if Xs_test is not None and y_test is not None and (ep + 1) % self.test_freq == 0:
                 model.eval()
                 with torch.no_grad():
                     if self.task == 'binary_classification':
                         y_pred_train, y_score_train = self.predict(Xs)
-                        y_pred_val, y_score_val = self.predict(Xs_val)
                         y_pred_test, y_score_test = self.predict(Xs_test)
                         train_acc = accuracy_score(y, y_pred_train)
-                        val_acc = accuracy_score(y_val, y_pred_val)
                         test_acc = accuracy_score(y_test, y_pred_test)
                         train_f1 = f1_score(y, y_pred_train) 
-                        val_f1 = f1_score(y_val, y_pred_val) 
+                        test_f1 = f1_score(y_test, y_pred_test)
                         train_auc = roc_auc_score(y, y_score_train)
-                        val_auc = roc_auc_score(y_val, y_score_val)
-                        if val_f1 > best_val_f1:
-                            best_val_f1 = val_f1
-                        if val_acc > best_val_acc:
-                            best_val_acc = val_acc
+                        test_auc = roc_auc_score(y_test, y_score_test)
+                        if test_f1 > best_test_f1:
+                            best_test_f1 = test_f1
+                        if test_acc > best_test_acc:
                             best_test_acc = test_acc
-                        if val_auc > best_val_auc:
-                            best_val_auc = val_auc
+                        if test_auc > best_test_auc:
+                            best_test_auc = test_auc
                         print(
-                            "[Final] Epoch {}: train accuracy {}, val accuracy {}".format(ep + 1, train_acc, val_acc))
-                        print("[Final] Epoch {}: train f1 {}, val f1 {}".format(ep + 1, train_f1, val_f1))
-                        print("[Final] Epoch {}: best val acc {}, best val f1 {}".format(ep + 1, best_val_acc,
-                                                                                           best_val_f1))
-                        print("[Final] Epoch {}: train auc {}, test f1 {}".format(ep + 1, train_auc, val_auc))
+                            "[Final] Epoch {}: train accuracy {}, test accuracy {}".format(ep + 1, train_acc, test_acc))
+                        print("[Final] Epoch {}: train f1 {}, test f1 {}".format(ep + 1, train_f1, test_f1))
+                        print("[Final] Epoch {}: best test acc {}, best test f1 {}".format(ep + 1, best_test_acc,
+                                                                                           best_test_f1))
+                        print("[Final] Epoch {}: train auc {}, test auc {}".format(ep + 1, train_auc, test_auc))
                         self.writer.add_scalars("Aggregation model/train & test accuracy",
                                                 {'train': train_acc,
-                                                 'test': val_acc}, ep + 1)
+                                                 'test': test_acc}, ep + 1)
                         self.writer.add_scalars("Aggregation model/train & test F1-score",
                                                 {'train': train_f1,
-                                                 'test': val_f1}, ep + 1)
+                                                 'test': test_f1}, ep + 1)
                         self.writer.add_scalars("Aggregation model/train & test AUC score",
                                                 {'train': train_auc,
-                                                 'test': val_auc}, ep + 1)
+                                                 'test': test_auc}, ep + 1)
                     elif self.task == 'regression':
                         y_pred_train, y_score_train = self.predict(Xs)
-                        y_pred_val, y_score_val = self.predict(Xs_val)
                         y_pred_test, y_score_test = self.predict(Xs_test)
                         train_rmse = np.sqrt(mean_squared_error(y, y_score_train))
-                        val_rmse = np.sqrt(mean_squared_error(y_val, y_score_val))
                         test_rmse = np.sqrt(mean_squared_error(y_test, y_score_test))
-                        if val_rmse < best_val_rmse:
-                            best_val_rmse = val_rmse
+                        if test_rmse < best_test_rmse:
                             best_test_rmse = test_rmse
                         print("[Final] Epoch {}: train rmse {}, val rmse {}".format(ep + 1, train_rmse, val_rmse))
-                        print("[Final] Epoch {}: best val rmse {}".format(ep + 1, best_val_rmse))
+                        print("[Final] Epoch {}: best val rmse {}".format(ep + 1, best_test_rmse))
                         self.writer.add_scalars("Aggregation model/train & test rmse",
                                                 {'train': train_rmse,
-                                                 'test': val_rmse}, ep + 1)
-                    elif self.task == 'multi_classification':
-                        if self.model_type == 'fc':
-                            train_acc = self.eval_image(Xs, y, ['accuracy'], has_transform=False)
-                            val_acc = self.eval_image(Xs_val, y_val, ['accuracy'], has_transform=False)
-                            test_acc = self.eval_image(Xs_test, y_test, ['accuracy'], has_transform=False)
-                        else:
-                            train_acc = self.eval_image(Xs, y, ['accuracy'], has_transform=True)
-                            val_acc = self.eval_image(Xs_val, y_val, ['accuracy'], has_transform=True)
-                            test_acc = self.eval_image(Xs_test, y_test, ['accuracy'], has_transform=True)
-                        if val_acc > best_val_acc:
-                            best_val_acc = val_acc
-                            best_test_acc = test_acc
-                        print(
-                            "[Final] Epoch {}: train accuracy {}, test accuracy {}".format(ep + 1, train_acc, val_acc))
-                        print("[Final] Epoch {}: best test acc {}".format(ep + 1, best_val_acc))
-                        self.writer.add_scalars("Aggregation model/train & test accuracy",
-                                                {'train': train_acc,
-                                                 'test': val_acc}, ep + 1)
+                                                 'test': test_rmse}, ep + 1)
+                    # elif self.task == 'multi_classification':
+                    #     if self.model_type == 'fc':
+                    #         train_acc = self.eval_image(Xs, y, ['accuracy'], has_transform=False)
+                    #         val_acc = self.eval_image(Xs_val, y_val, ['accuracy'], has_transform=False)
+                    #         test_acc = self.eval_image(Xs_test, y_test, ['accuracy'], has_transform=False)
+                    #     else:
+                    #         train_acc = self.eval_image(Xs, y, ['accuracy'], has_transform=True)
+                    #         val_acc = self.eval_image(Xs_val, y_val, ['accuracy'], has_transform=True)
+                    #         test_acc = self.eval_image(Xs_test, y_test, ['accuracy'], has_transform=True)
+                    #     if val_acc > best_val_acc:
+                    #         best_val_acc = val_acc
+                    #         best_test_acc = test_acc
+                    #     print(
+                    #         "[Final] Epoch {}: train accuracy {}, test accuracy {}".format(ep + 1, train_acc, val_acc))
+                    #     print("[Final] Epoch {}: best test acc {}".format(ep + 1, best_val_acc))
+                    #     self.writer.add_scalars("Aggregation model/train & test accuracy",
+                    #                             {'train': train_acc,
+                    #                              'test': val_acc}, ep + 1)
                     else:
                         raise UnsupportedTaskError
                     self.log.write("{}\t{}\t{}\t{}".format(self.comm_size, best_test_acc,
                                                            0, best_test_rmse))
             epoch_duration_sec = (datetime.now() - start_epoch_time).seconds
             print("Epoch {} duration {} sec".format(ep + 1, epoch_duration_sec), flush=True)
-        return best_val_acc, best_val_f1, best_val_rmse, best_val_auc
-
+        return best_test_acc, best_test_f1, best_test_rmse, best_test_auc
+    
     def predict(self, Xs):
+        print("Xs[0].shape", Xs[0].shape)
         Xs_tensor = [torch.from_numpy(X).float().to(self.device) for X in Xs]
         y_score = self.split_nn.to(self.device)(Xs_tensor).detach().cpu().numpy()
         y_pred = np.where(y_score > 0.5, 1, 0)

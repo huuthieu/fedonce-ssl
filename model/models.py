@@ -142,16 +142,16 @@ class FC(nn.Module):
             return X
 
         out = F.relu(self.fc_layers[0](X))
-        for fc in self.fc_layers[1:-2]:
-            out = F.relu(fc(out))
-
-        # import pdb; pdb.set_trace()
-        out1 = torch.tanh(self.fc_layers[-2](out))
-        out =  F.relu(self.fc_layers[-2](out))
-        self.combine_list.append(out1)
+        if len(self.fc_layers) >= 3:
+            for fc in self.fc_layers[1:-2]:
+                out = F.relu(fc(out))
+            # import pdb; pdb.set_trace()
+            out1 = torch.tanh(self.fc_layers[-2](out))
+            out =  F.relu(self.fc_layers[-2](out))
+            self.combine_list.append(out1)
 
         if self.ssl or self.feature:
-            return out
+            return out1
         if self.activation == 'sigmoid':
             out = torch.sigmoid(self.fc_layers[-1](out))
         elif self.activation == 'tanh':

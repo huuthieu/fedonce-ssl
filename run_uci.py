@@ -356,9 +356,9 @@ def train_fedonce_multi_round(remove_ratio = 0, active_party = 0, beta = 0.5, no
             active_party=active_party
         )
 
-        acc, _, _, _ , _ = aggregate_model.train(xs_train, y_train, xs_val, y_val)
+        acc, _, _, _  = aggregate_model.train(xs_train, y_train, xs_val, y_val)
         
-        y_test_score = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
+        _, y_test_score = aggregate_model.predict(xs_test)
         y_test_pred = np.where(y_test_score > 0.5, 1, 0)
         test_f1 = f1_score(y_test, y_test_pred)
         test_prec = precision_score(y_test, y_test_pred)
@@ -881,7 +881,7 @@ if __name__ == '__main__':
     # run_vertical_fl_all_ration()
     # run_vertical_fl_split_all_ration()
     # run_vertical_fl_noise_all_ration()
-    train_fedonce(remove_ratio = 0, active_party= 1)
+    # train_fedonce(remove_ratio = 0, active_party= 1)
     # train_fedonce_scarf(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
     # train_fedonce_two_side(remove_ratio = 0, active_party= 1, k_percent = 100, select_host = True)
     # train_fedonce_split(remove_ratio = 0, active_party= 1)
@@ -889,13 +889,13 @@ if __name__ == '__main__':
     # run_combine_all_ration()    
 #     run_vertical_fl_sup_all_ration()
     # run_combine_ft_selection_all_ration(active_party = 0)
-    # run_vertical_fl_ft_selection_all_ration(active_party = 1, select_host = True)
+    # run_vertical_fl_ft_selection_all_ration(active_party = 1, sele`ct_host = True)
     # for k in range(1, 10):
         # print(">>>>>>>>>>>>>>>>")
-        # print("Vlaue of k: ", k)
+        # print("Value of k: ", k)
         # run_vertical_fl_ft_selection_all_ration(active_party = 0, select_host = False, remain=False, k1_percent = k*10)
     
     # run_vertical_fl_multiple_seed()
 
     # run_vertical_fl_dae_multiple_seed()
-    # train_fedonce_multi_round(remove_ratio=0, active_party=0)
+    train_fedonce_multi_round(remove_ratio=0, active_party=0)

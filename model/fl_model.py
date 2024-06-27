@@ -536,7 +536,8 @@ class VerticalFLModel:
                         # save perturbed labels for each model
                         np.save(pred_label_path, pred_labels)
                         np.save(perturb_label_path, perturb_labels)
-                        torch.save(local_model.state_dict(), local_model_path)
+                            
+                    torch.save(local_model.state_dict(), local_model_path)
 
                     self.local_models.append(local_model)
 

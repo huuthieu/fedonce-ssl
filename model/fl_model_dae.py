@@ -406,8 +406,11 @@ class VerticalFLModel:
                     print("Loading local model for party {} from {}".format(party_id, local_model_path))
                     if self.cuda_parallel:
                         local_model = nn.DataParallel(local_model)
-                    local_model.load_state_dict(torch.load(local_model_path,
+                    try:
+                        local_model.load_state_dict(torch.load(local_model_path,
                                                            map_location=lambda storage, location: storage))
+                    except:
+                        local_model.network.load_state_dict(torch.load(local_model_path)['model'])
                     self.local_models.append(local_model)
                 else:
                     local_model = self.train_local_party(0, party_id, Xs[party_id],
@@ -419,8 +422,11 @@ class VerticalFLModel:
                         # save perturbed labels for each model
                         np.save(pred_label_path, pred_labels)
                         np.save(perturb_label_path, perturb_labels)
-                    torch.save(local_model.state_dict(), local_model_path)
-
+                    try:
+                        torch.save(local_model.state_dict(), local_model_path)
+                    except:
+                        print("saving model to local_model_path: ", local_model_path)
+                        local_model.save(local_model_path)
                     self.local_models.append(local_model)
 
         # if self.privacy:
@@ -493,7 +499,7 @@ class VerticalFLModel:
             num_features = Xs[self.active_party_id].shape[1]
             if self.model_type == 'fc':
                 active_model = FC(num_features, self.local_hidden_layers, output_size=self.local_output_dim)
-                self.agg_model = AggModel(
+                self.agg_model = AggModelTest( input_size= self.local_output_dim + Z.shape[1],
                                           mid_output_dim=self.local_output_dim,
                                           num_parties=self.num_parties,
                                           agg_hidden_sizes=self.agg_hidden_layers,
@@ -597,8 +603,6 @@ class VerticalFLModel:
             passive_party_range = list(range(self.num_parties))
             passive_party_range.remove(self.active_party_id)
             print("passive_party_range:", passive_party_range)
-            # import pdb; pdb.set_trace()
-            Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
             self.train_aggregation(ep, Z, Xs[self.active_party_id], y, model_optimizer)
 
             if Xs_test is not None and y_test is not None and (ep + 1) % self.test_freq == 0:

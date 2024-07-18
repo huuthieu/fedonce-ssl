@@ -120,6 +120,7 @@ def train_fedonce(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 
             num_parties=num_parties,
             active_party_id=active_party,
             name=model_name,
+            full_name=name,
             num_epochs=100,
             num_local_rounds=100,
             local_lr=3e-4,

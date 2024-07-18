@@ -622,6 +622,7 @@ class VerticalFLModel:
                         test_auc = roc_auc_score(y_test, y_score_test)
                         if test_f1 > best_test_f1:
                             best_test_f1 = test_f1
+                            torch.save(self.agg_model.state_dict(), agg_model_path)
                         if test_acc > best_test_acc:
                             best_test_acc = test_acc
                         if test_auc > best_test_auc:
@@ -675,8 +676,9 @@ class VerticalFLModel:
             epoch_duration_sec = (datetime.now() - start_epoch).seconds
             print("Epoch {} duration {} sec".format(ep + 1, epoch_duration_sec), flush=True)
         # save aggregate model
-        agg_model_path = "cache/{}_agg_model_dim_{}.pth".format(self.full_name, self.local_output_dim)
-        torch.save(self.agg_model.state_dict(), agg_model_path)
+        # agg_model_path = "cache/{}_agg_model_dim_{}.pth".format(self.full_name, self.local_output_dim)
+        # torch.save(self.agg_model.state_dict(), agg_model_path)
+        self.agg_model.load_state_dict(torch.load(agg_model_path))
         return best_test_acc, best_test_f1, best_test_rmse, best_test_auc, selected_features
     
     def remove_noise_index(self, x, noise_index):

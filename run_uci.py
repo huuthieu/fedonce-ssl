@@ -114,7 +114,7 @@ def train_fedonce(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 
         print("Train shape: {}".format(xs_train[0].shape))
         print("Val shape: {}".format(xs_val[0].shape))
         model_name = "vertical_fl_phishing_party_{}_fold_{}".format(num_parties, i)
-        name = "{}_active_{}".format(model_name, active_party)
+        name = "{}_active_{}_k1_{}_k_{}_random_state_{}".format(model_name, active_party, k1_percent, k_percent, random_state)
         writer = SummaryWriter("runs/{}".format(name))
         aggregate_model = VerticalFLModel(
             num_parties=num_parties,
@@ -1423,4 +1423,4 @@ if __name__ == '__main__':
     #     run_vertical_fl_dae_ft_selection_all_ration(active_party = 1, select_host = False, k1_percent = k*10)
     
     # train_fedonce_l1(active_party=1)
-    train_fedonce_dae_l1(active_party=1)
+    # train_fedonce_dae_l1(active_party=1)

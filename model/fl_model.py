@@ -250,12 +250,14 @@ class VerticalFLModel:
                 loss.backward()
 
                 if self.privacy == 'MA' and ((j + 1) % self.batches_per_lot != 0) and (j + 1 < len(data_loader)):
+                # if False:
                     optimizer.virtual_step()
                 else:
                     optimizer.step()
                 num_mini_batches += 1
 
             if self.privacy is None:
+            # if True:
                 print("[Local] Party {}, Epoch {}: training loss {}"
                       .format(party_id, ep * self.num_local_rounds + i + 1, total_loss / num_mini_batches))
             elif self.privacy == 'MA':
@@ -454,7 +456,7 @@ class VerticalFLModel:
             print("DP calculation finished, local_sigma={}, agg_sigma={}".format(self.local_dp_getter.sigma,
                                                                                  self.agg_dp_getter.sigma))
 
-        fmt_name = convert_name_to_path(self.name)
+        fmt_name = convert_name_to_path(self.full_name)
         label_path = "cache/{}_labels_dim_{}.npy".format(fmt_name, self.local_output_dim)
         perturb_label_path = "cache/{}_perturb_labels_dim_{}.npy".format(fmt_name, self.local_output_dim)
         pred_label_path = "cache/{}_pred_labels_dim_{}.npy".format(fmt_name, self.local_output_dim)
@@ -619,6 +621,8 @@ class VerticalFLModel:
                                           active_model=active_model,
                                           output_dim=1,
                                           activation='sigmoid')
+
+
             elif self.model_type == 'ncf':
                 active_model = NCF(self.ncf_counts[self.active_party_id], self.ncf_embed_dims[self.active_party_id],
                                    self.local_hidden_layers, output_size=self.local_output_dim)
@@ -727,7 +731,7 @@ class VerticalFLModel:
                         test_f1 = f1_score(y_test, y_pred_test)
                         train_auc = roc_auc_score(y, y_score_train)
                         test_auc = roc_auc_score(y_test, y_score_test)
-                        if test_f1 > best_test_f1:
+                        if test_f1 >= best_test_f1:
                             best_test_f1 = test_f1
                             torch.save(self.agg_model.state_dict(), agg_model_path)
                         if test_acc > best_test_acc:
@@ -780,11 +784,10 @@ class VerticalFLModel:
                                                  'test': test_acc}, ep + 1)
                     else:
                         raise UnsupportedTaskError
-            self.agg_model.load_state_dict(torch.load(agg_model_path))
             epoch_duration_sec = (datetime.now() - start_epoch).seconds
             print("Epoch {} duration {} sec".format(ep + 1, epoch_duration_sec), flush=True)
         # save aggregate model
-        
+        self.agg_model.load_state_dict(torch.load(agg_model_path))
         return best_test_acc, best_test_f1, best_test_rmse, best_test_auc, selected_features
     
     def remove_noise_index(self, x, noise_index):

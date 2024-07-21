@@ -192,7 +192,12 @@ class VerticalFLModel:
         X_df = pd.DataFrame(X)
         dae = DAE(device='cuda:0', body_network_cfg=dict(hidden_size=16))
 
-        dae.fit(X_df, max_epochs=self.num_local_rounds, batch_size=self.local_batch_size, model_checkpoint = model_checkpoint, verbose=1)
+        dae.fit(X_df, max_epochs=self.num_local_rounds, batch_size=self.local_batch_size, model_checkpoint = model_checkpoint, verbose=1,
+                dp_batch_size = self.agg_dp_getter.batch_size,
+                dp_num_instances = self.agg_dp_getter.num_instances,
+                alpha = self.agg_dp_getter.alpha,
+                sigma = self.agg_dp_getter.sigma,
+                grad_norm_C = self.grad_norm_C)
     
         return dae
 
@@ -366,7 +371,7 @@ class VerticalFLModel:
             print("DP calculation finished, local_sigma={}, agg_sigma={}".format(self.local_dp_getter.sigma,
                                                                                  self.agg_dp_getter.sigma))
 
-        fmt_name = convert_name_to_path(self.name)
+        fmt_name = convert_name_to_path(self.full_name)
         label_path = "cache/{}_labels_dim_{}.npy".format(fmt_name, self.local_output_dim)
         perturb_label_path = "cache/{}_perturb_labels_dim_{}.npy".format(fmt_name, self.local_output_dim)
         pred_label_path = "cache/{}_pred_labels_dim_{}.npy".format(fmt_name, self.local_output_dim)
@@ -604,7 +609,7 @@ class VerticalFLModel:
             passive_party_range.remove(self.active_party_id)
             print("passive_party_range:", passive_party_range)
             self.train_aggregation(ep, Z, Xs[self.active_party_id], y, model_optimizer)
-
+            agg_model_path = "cache/{}_agg_model_dim_{}.pth".format(self.full_name, self.local_output_dim)
             if Xs_test is not None and y_test is not None and (ep + 1) % self.test_freq == 0:
                 self.chmod('eval')
                 with torch.no_grad():
@@ -620,7 +625,7 @@ class VerticalFLModel:
                         test_f1 = f1_score(y_test, y_pred_test)
                         train_auc = roc_auc_score(y, y_score_train)
                         test_auc = roc_auc_score(y_test, y_score_test)
-                        if test_f1 > best_test_f1:
+                        if test_f1 >= best_test_f1:
                             best_test_f1 = test_f1
                             torch.save(self.agg_model.state_dict(), agg_model_path)
                         if test_acc > best_test_acc:
@@ -676,8 +681,8 @@ class VerticalFLModel:
             epoch_duration_sec = (datetime.now() - start_epoch).seconds
             print("Epoch {} duration {} sec".format(ep + 1, epoch_duration_sec), flush=True)
         # save aggregate model
-        # agg_model_path = "cache/{}_agg_model_dim_{}.pth".format(self.full_name, self.local_output_dim)
-        # torch.save(self.agg_model.state_dict(), agg_model_path)
+#         agg_model_path = "cache/{}_agg_model_dim_{}.pth".format(self.full_name, self.local_output_dim)
+#         torch.save(self.agg_model.state_dict(), agg_model_path)
         self.agg_model.load_state_dict(torch.load(agg_model_path))
         return best_test_acc, best_test_f1, best_test_rmse, best_test_auc, selected_features
     
@@ -689,6 +694,8 @@ class VerticalFLModel:
         
         X_df = pd.DataFrame(X)
         Z = model.transform(X_df)
+
+        # return np.random.normal(0, 1, Z.shape)
 
         return np.float32(Z)
 

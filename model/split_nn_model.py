@@ -151,6 +151,7 @@ class SplitNNModel:
                 raise UnsupportedTaskError
 
             if use_cache:
+                print("Load local model from cache")
                 if party_id == self.active_party:
                     local_model.load_state_dict(active_state_dict)
                 else:
@@ -184,6 +185,7 @@ class SplitNNModel:
             raise UnsupportedTaskError
 
         if use_cache:
+            print("Load agg model from cache")
             self.agg_model.load_state_dict(agg_state_dict)
 
         # initialize splitNN
@@ -253,53 +255,53 @@ class SplitNNModel:
         best_test_rmse = np.inf
         for ep in range(self.num_epochs):
             start_epoch_time = datetime.now()
-            model.train()
-            total_loss = 0.0
-            num_batches = 0
-            for _, data in enumerate(data_loader):
-                Xs_i = [X.to(self.device) for X in data[:-1]]
-                y_i = data[-1].to(self.device)
+            # model.train()
+            # total_loss = 0.0
+            # num_batches = 0
+            # for _, data in enumerate(data_loader):
+            #     Xs_i = [X.to(self.device) for X in data[:-1]]
+            #     y_i = data[-1].to(self.device)
 
-                optimizer.zero_grad()
-                y_pred = model(Xs_i)
-                # forward propagation communication size in bytes
-                self.comm_size += (model.agg_model.fc_layers[0].in_features
-                                  * np.dtype(np.float32).itemsize)
+            #     optimizer.zero_grad()
+            #     y_pred = model(Xs_i)
+            #     # forward propagation communication size in bytes
+            #     self.comm_size += (model.agg_model.fc_layers[0].in_features
+            #                       * np.dtype(np.float32).itemsize)
 
-                if self.task in ["binary_classification", "regression"]:
-                    loss = loss_fn(y_pred.view(-1), y_i)
-                elif self.task == "multi_classification":
-                    # image classification by default
-                    loss = loss_fn(y_pred, y_i.long())
-                else:
-                    raise UnsupportedTaskError
+            #     if self.task in ["binary_classification", "regression"]:
+            #         loss = loss_fn(y_pred.view(-1), y_i)
+            #     elif self.task == "multi_classification":
+            #         # image classification by default
+            #         loss = loss_fn(y_pred, y_i.long())
+            #     else:
+            #         raise UnsupportedTaskError
 
-                total_loss += loss.item()
-                num_batches += 1
-                loss.backward()
-                optimizer.step()
+            #     total_loss += loss.item()
+            #     num_batches += 1
+            #     loss.backward()
+            #     optimizer.step()
 
-                # backward propagation size in bytes
-                self.comm_size += (np.prod(model.agg_model.fc_layers[0].weight.grad.shape) +
-                                   np.prod(model.agg_model.fc_layers[0].bias.grad.shape)) \
-                                   * np.dtype(np.float32).itemsize
+            #     # backward propagation size in bytes
+            #     self.comm_size += (np.prod(model.agg_model.fc_layers[0].weight.grad.shape) +
+            #                        np.prod(model.agg_model.fc_layers[0].bias.grad.shape)) \
+            #                        * np.dtype(np.float32).itemsize
 
-            if self.optimizer == 'sgd':
-                scheduler.step(1)
+            # if self.optimizer == 'sgd':
+            #     scheduler.step(1)
 
-            if self.privacy is None:
-                print("[SplitNN] Epoch {}: training loss {}"
-                      .format(ep + 1, total_loss / num_batches))
-            elif self.privacy == 'MA':
-                epsilon, alpha = optimizer.privacy_engine.get_privacy_spent(self.delta)
-                print("[SplitNN] Epoch {}: training loss {}, eps {}, delta {}, alpha {}"
-                      .format(ep + 1, total_loss / num_batches, epsilon, self.delta, alpha))
-                self.writer.add_scalar('Aggregation privacy accumulation', epsilon, ep + 1)
-            else:
-                raise UnsupportedPrivacyMechanismError
+            # if self.privacy is None:
+            #     print("[SplitNN] Epoch {}: training loss {}"
+            #           .format(ep + 1, total_loss / num_batches))
+            # elif self.privacy == 'MA':
+            #     epsilon, alpha = optimizer.privacy_engine.get_privacy_spent(self.delta)
+            #     print("[SplitNN] Epoch {}: training loss {}, eps {}, delta {}, alpha {}"
+            #           .format(ep + 1, total_loss / num_batches, epsilon, self.delta, alpha))
+            #     self.writer.add_scalar('Aggregation privacy accumulation', epsilon, ep + 1)
+            # else:
+            #     raise UnsupportedPrivacyMechanismError
 
-            if self.writer:
-                self.writer.add_scalar('Aggregation training loss', total_loss / num_batches, ep + 1)
+            # if self.writer:
+            #     self.writer.add_scalar('Aggregation training loss', total_loss / num_batches, ep + 1)
 
             # test model
             if Xs_test is not None and y_test is not None and (ep + 1) % self.test_freq == 0:

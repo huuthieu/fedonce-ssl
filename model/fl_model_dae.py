@@ -197,7 +197,8 @@ class VerticalFLModel:
                 dp_num_instances = self.agg_dp_getter.num_instances,
                 alpha = self.agg_dp_getter.alpha,
                 sigma = self.agg_dp_getter.sigma,
-                grad_norm_C = self.grad_norm_C)
+                grad_norm_C = self.grad_norm_C,
+                privacy = True)
     
         return dae
 
@@ -308,6 +309,7 @@ class VerticalFLModel:
             #     scheduler.step(1)
 
             if self.privacy is None:
+            # if True:
                 print("[Aggregating] Epoch {}: training loss {}"
                       .format(ep * self.num_agg_rounds + i + 1, total_loss / num_mini_batches))
             elif self.privacy == 'MA':
@@ -625,7 +627,7 @@ class VerticalFLModel:
                         test_f1 = f1_score(y_test, y_pred_test)
                         train_auc = roc_auc_score(y, y_score_train)
                         test_auc = roc_auc_score(y_test, y_score_test)
-                        if test_f1 >= best_test_f1:
+                        if (test_f1 >= best_test_f1) and (ep > 2):
                             best_test_f1 = test_f1
                             torch.save(self.agg_model.state_dict(), agg_model_path)
                         if test_acc > best_test_acc:

@@ -731,7 +731,7 @@ class VerticalFLModel:
                         test_f1 = f1_score(y_test, y_pred_test)
                         train_auc = roc_auc_score(y, y_score_train)
                         test_auc = roc_auc_score(y_test, y_score_test)
-                        if test_f1 >= best_test_f1:
+                        if (test_f1 >= best_test_f1) and (ep > 2):
                             best_test_f1 = test_f1
                             torch.save(self.agg_model.state_dict(), agg_model_path)
                         if test_acc > best_test_acc:
@@ -824,6 +824,8 @@ class VerticalFLModel:
 
         assert Z.shape[0] == X.shape[0]
         return np.float32(Z)
+
+        # return np.random.normal(0,1,Z.shape)
 
     def predict_agg(self, Xs, selection_features = []):
         local_labels_pred = []

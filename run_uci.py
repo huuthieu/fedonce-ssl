@@ -127,7 +127,7 @@ def train_fedonce(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 
             local_hidden_layers=[50, 30],
             local_batch_size=100,
             local_weight_decay=1e-5,
-            local_output_size=10,
+            local_output_size=48,
             num_agg_rounds=1,
             agg_lr=1e-4,
             agg_hidden_layers=[10],
@@ -147,7 +147,8 @@ def train_fedonce(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 
             privacy=None,
             batches_per_lot=5,
             epsilon=1,
-            delta=1.0/xs_train[0].shape[0]
+            delta=1.0/xs_train[0].shape[0],
+            repr_noise = 0.0
         )
         selected_features = []
         if False == False and k1_percent < 100:
@@ -306,7 +307,7 @@ def train_fedonce_l1(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio
     # std_recall = 0
 
     # out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean, std)
-    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: F1 mean={}, std={}, prec mean={}, std={}, recall mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean_f1, std_f1, mean_prec, std_prec, mean_recall, std_recall)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}, random_state {:.1f}, : F1 mean={}, std={}, prec mean={}, std={}, recall mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, random_state, mean_f1, std_f1, mean_prec, std_prec, mean_recall, std_recall)
     print(out)
     return mean_acc, mean_f1, mean_prec, mean_recall
 
@@ -964,7 +965,8 @@ def train_fedonce_dae(remove_ratio = 0, active_party = 0, beta = 0.5, noise_rati
             privacy=None,
             batches_per_lot=5,
             epsilon=1,
-            delta=1.0/xs_train[0].shape[0]
+            delta=1.0/xs_train[0].shape[0],
+            repr_noise = 1.5
         )
         selected_features = []
         if False == False and k1_percent < 100:
@@ -1070,7 +1072,7 @@ def train_fedonce_dae_l1(remove_ratio = 0, active_party = 0, beta = 0.5, noise_r
             optimizer='adam',
             privacy="MA",
             batches_per_lot=1,
-            epsilon=64,
+            epsilon=128,
             delta=1e-5,
             inter_party_comp_method="MA",
             grad_norm_C=1.5
@@ -1114,7 +1116,7 @@ def train_fedonce_dae_l1(remove_ratio = 0, active_party = 0, beta = 0.5, noise_r
     std_recall = np.std(recall_list)
 
     # out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean, std)
-    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: F1 mean={}, std={}, eval F1 mean={}, prec mean={}, std={}, recall mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean_f1, std_f1, mean_eval_f1, mean_prec, std_prec, mean_recall, std_recall)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}, random_state {:.1f},: F1 mean={}, std={}, eval F1 mean={}, prec mean={}, std={}, recall mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, random_state, mean_f1, std_f1, mean_eval_f1, mean_prec, std_prec, mean_recall, std_recall)
 
     print(out)
     return mean_acc, mean_f1, mean_prec, mean_recall, random_state, k_percent, k1_percent
@@ -1461,10 +1463,22 @@ if __name__ == '__main__':
     # for k in range(1, 10):
     #     print(">>>>>>>>>>>>>>>>")
     #     print("Value of k: ", k)
-    #     run_vertical_fl_dae_ft_selection_all_ration(active_party = 1, select_host = False, k1_percent = k*10)
+    #     run_vertical_fl_dae_ft_selection_all_ration(active_party = 0, select_host = False, k1_percent = k*10)
     
-    # train_fedonce_l1(active_party=1)
+    # train_fedonce_l1(active_party=0)
     # train_fedonce_dae_l1(active_party=0)
 
-    run_vertical_fl_l1_multiple_seed()
+    # run_vertical_fl_l1_multiple_seed()
     # run_vertical_fl_dae_l1_multiple_seed()
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--number", type=int, default=0)
+    args = parser.parse_args()
+    number = args.number
+    if number == 0:
+        run_vertical_fl_l1_multiple_seed()
+    elif number == 1:
+        run_vertical_fl_dae_l1_multiple_seed()
+    elif number == 2:
+        train_fedonce_l1(  active_party=0)

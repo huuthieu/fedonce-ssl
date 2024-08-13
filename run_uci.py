@@ -1404,6 +1404,22 @@ def run_vertical_fl_dae_ft_selection_all_ration(active_party, select_host = True
     Parallel(n_jobs=6)(delayed(train_fedonce_dae)(active_party = active_party, k_percent = ratio*100, k1_percent = k1_percent,
                                                   select_host= select_host) for ratio in ratios)
 
+def run_vertical_fl_l1_ft_selection_all_ration_select_guest(active_party):
+    ratios = np.arange(0.1, 1.0, 0.1)
+    Parallel(n_jobs=-1)(delayed(train_fedonce_l1)(active_party = active_party, k_percent = 100, k1_percent = ratio*100,
+                                                  select_host= False) for ratio in ratios)
+    
+def run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party):
+    ratios = np.arange(0.1, 1.0, 0.1)
+    Parallel(n_jobs=-1)(delayed(train_fedonce_dae)(active_party = active_party, k_percent = 100, k1_percent = ratio*100,
+                                                  select_host= False) for ratio in ratios)
+    
+def run_vertical_fl_dae_l1_ft_selection_all_ration_select_guest(active_party):
+    ratios = np.arange(0.1, 1.0, 0.1)
+    Parallel(n_jobs=-1)(delayed(train_fedonce_dae_l1)(active_party = active_party, k_percent = 100, k1_percent = ratio*100,
+                                                  select_host= False) for ratio in ratios)
+
+
 def run_vertical_fl_dae_select_all_ration_multi_seed():
     def select_host(k1_percent = 100):
         ratios = np.arange(0.1, 1.0, 0.1)
@@ -1471,14 +1487,22 @@ if __name__ == '__main__':
     # run_vertical_fl_l1_multiple_seed()
     # run_vertical_fl_dae_l1_multiple_seed()
 
+    # run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party = 0)
+
+    # run_vertical_fl_dae_l1_ft_selection_all_ration_select_guest(active_party = 1)
+    # run_vertical_fl_l1_ft_selection_all_ration_select_guest(active_party = 1)
+
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--number", type=int, default=0)
     args = parser.parse_args()
     number = args.number
     if number == 0:
-        run_vertical_fl_l1_multiple_seed()
+#         run_vertical_fl_l1_multiple_seed()
+        train_fedonce_l1(active_party=1, random_state = 50)
+
     elif number == 1:
-        run_vertical_fl_dae_l1_multiple_seed()
-    elif number == 2:
-        train_fedonce_l1(  active_party=0)
+        train_fedonce_dae_l1(active_party=1, random_state = 50)
+#         run_vertical_fl_dae_l1_multiple_seed()
+#     elif number == 2:
+#         train_fedonce_l1(active_party=1)

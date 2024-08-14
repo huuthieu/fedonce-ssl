@@ -86,7 +86,7 @@ def feature_selection(x_train_val, y_train_val, x_test, y_test, k_percent, name)
 
 ## FedOnce
 def train_fedonce(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 0, k_percent = 100,  k1_percent = 100, select_host = True,
-                  remain_selection = False, random_state = 10):
+                  remain_selection = False, random_state = 50, reps = 0.0):
     num_parties = 2
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=None,
                                                         feature_ratio_beta = beta, noise_ratio = noise_ratio,
@@ -148,7 +148,7 @@ def train_fedonce(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 
             batches_per_lot=5,
             epsilon=1,
             delta=1.0/xs_train[0].shape[0],
-            repr_noise = 0.0
+            repr_noise = reps
         )
         selected_features = []
         if False == False and k1_percent < 100:
@@ -194,7 +194,7 @@ def train_fedonce(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 
 
 ## FedOnce L1
 def train_fedonce_l1(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 0, k_percent = 100,  k1_percent = 100, select_host = True,
-                  remain_selection = False, random_state = 10):
+                  remain_selection = False, random_state = 50):
     num_parties = 2
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=None,
                                                         feature_ratio_beta = beta, noise_ratio = noise_ratio,
@@ -905,8 +905,8 @@ def train_fedonce_split(remove_ratio = 0, active_party = 1, beta = 0.5, noise_ra
     # return mean, std
 
 ##
-def train_fedonce_dae(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 0, k_percent = 100, select_host = True, random_state = 10,
-                      k1_percent = 100):
+def train_fedonce_dae(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 0, k_percent = 100, select_host = True, random_state = 50,
+                      k1_percent = 100, reps = 0.0):
     num_parties = 2
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=None,
                                                         feature_ratio_beta = beta, noise_ratio = noise_ratio, random_state = random_state)
@@ -966,7 +966,7 @@ def train_fedonce_dae(remove_ratio = 0, active_party = 0, beta = 0.5, noise_rati
             batches_per_lot=5,
             epsilon=1,
             delta=1.0/xs_train[0].shape[0],
-            repr_noise = 1.5
+            repr_noise = reps
         )
         selected_features = []
         if False == False and k1_percent < 100:
@@ -1013,7 +1013,7 @@ def train_fedonce_dae(remove_ratio = 0, active_party = 0, beta = 0.5, noise_rati
     return mean_acc, mean_f1, mean_prec, mean_recall, random_state, k_percent, k1_percent
 
 
-def train_fedonce_dae_l1(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 0, k_percent = 100, select_host = True, random_state = 10,
+def train_fedonce_dae_l1(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 0, k_percent = 100, select_host = True, random_state = 50,
                       k1_percent = 100):
     num_parties = 2
     xs_train_val, y_train_val, xs_test, y_test = load_uci(test_rate = 0.2, remove_ratio=remove_ratio, feature_order=None,
@@ -1404,22 +1404,26 @@ def run_vertical_fl_dae_ft_selection_all_ration(active_party, select_host = True
     Parallel(n_jobs=6)(delayed(train_fedonce_dae)(active_party = active_party, k_percent = ratio*100, k1_percent = k1_percent,
                                                   select_host= select_host) for ratio in ratios)
 
+def run_vertical_fl_dae_l1_ft_selection_all_ration_select_guest(active_party):
+    ratios = np.arange(0.1, 1.0, 0.1)
+    Parallel(n_jobs=-1)(delayed(train_fedonce_dae_l1)(active_party = active_party, k_percent = 100, k1_percent = ratio*100,
+                                                  select_host= False) for ratio in ratios)
+    
+def run_vertical_fl_ft_selection_all_ration_select_guest(active_party, reps = 0.0):
+    ratios = np.arange(0.1, 1.0, 0.1)
+    Parallel(n_jobs=-1)(delayed(train_fedonce)(active_party = active_party, k_percent = 100, k1_percent = ratio*100,
+                                                  select_host= False, reps = reps) for ratio in ratios)
+    
+def run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party, reps = 0.0):
+    ratios = np.arange(0.1, 1.0, 0.1)
+    Parallel(n_jobs=-1)(delayed(train_fedonce_dae)(active_party = active_party, k_percent = 100, k1_percent = ratio*100,
+                                                  select_host= False, reps = reps) for ratio in ratios)
+    
 def run_vertical_fl_l1_ft_selection_all_ration_select_guest(active_party):
     ratios = np.arange(0.1, 1.0, 0.1)
     Parallel(n_jobs=-1)(delayed(train_fedonce_l1)(active_party = active_party, k_percent = 100, k1_percent = ratio*100,
                                                   select_host= False) for ratio in ratios)
     
-def run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party):
-    ratios = np.arange(0.1, 1.0, 0.1)
-    Parallel(n_jobs=-1)(delayed(train_fedonce_dae)(active_party = active_party, k_percent = 100, k1_percent = ratio*100,
-                                                  select_host= False) for ratio in ratios)
-    
-def run_vertical_fl_dae_l1_ft_selection_all_ration_select_guest(active_party):
-    ratios = np.arange(0.1, 1.0, 0.1)
-    Parallel(n_jobs=-1)(delayed(train_fedonce_dae_l1)(active_party = active_party, k_percent = 100, k1_percent = ratio*100,
-                                                  select_host= False) for ratio in ratios)
-
-
 def run_vertical_fl_dae_select_all_ration_multi_seed():
     def select_host(k1_percent = 100):
         ratios = np.arange(0.1, 1.0, 0.1)
@@ -1471,6 +1475,10 @@ if __name__ == '__main__':
     # run_vertical_fl_dae_multiple_seed()
     # train_fedonce_multi_round(remove_ratio=0, active_party=1)   
     # train_fedonce_dae_multi_round(remove_ratio=0, active_party=1)
+    
+#     run_vertical_fl_dae_l1_ft_selection_all_ration_select_guest(active_party = 0)
+
+    # run_vertical_fl_l1_ft_selection_all_ration_select_guest(active_party = 0)
 
     # run_vertical_fl_dae_select_all_ration_multi_seed()
 
@@ -1487,11 +1495,6 @@ if __name__ == '__main__':
     # run_vertical_fl_l1_multiple_seed()
     # run_vertical_fl_dae_l1_multiple_seed()
 
-    # run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party = 0)
-
-    # run_vertical_fl_dae_l1_ft_selection_all_ration_select_guest(active_party = 1)
-    # run_vertical_fl_l1_ft_selection_all_ration_select_guest(active_party = 1)
-
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--number", type=int, default=0)
@@ -1499,10 +1502,20 @@ if __name__ == '__main__':
     number = args.number
     if number == 0:
 #         run_vertical_fl_l1_multiple_seed()
-        train_fedonce_l1(active_party=1, random_state = 50)
+#         train_fedonce_l1(active_party=1, random_state = 50)
+        run_vertical_fl_ft_selection_all_ration_select_guest(active_party=0, reps = 1.0)
 
     elif number == 1:
-        train_fedonce_dae_l1(active_party=1, random_state = 50)
+#         train_fedonce_dae_l1(active_party=1, random_state = 50)
 #         run_vertical_fl_dae_l1_multiple_seed()
-#     elif number == 2:
+        run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party=0, reps = 1.0)
+    elif number == 2:
 #         train_fedonce_l1(active_party=1)
+        run_vertical_fl_ft_selection_all_ration_select_guest(active_party=1, reps = 1.0)
+    elif number == 3:
+#         train_fedonce_l1(active_party=1)
+        run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party=1, reps = 1.0)
+#     elif number == 4:
+# #         train_fedonce_l1(active_party=1)
+#         run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party=1, random_state = 50, reps = 1.0)
+

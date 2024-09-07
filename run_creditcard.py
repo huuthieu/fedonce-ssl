@@ -5,7 +5,7 @@ import shutil
 import numpy as np
 
 import xgboost as xgb
-from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, mean_squared_error, log_loss
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, mean_squared_error, log_loss, precision_score, recall_score
 from sklearn.model_selection import KFold
 
 import torch
@@ -16,8 +16,10 @@ from utils.data_utils import load_data_cross_validation, load_movielens, load_cr
 from model.fl_model import VerticalFLModel
 from model.single_party_model import SingleParty
 from model.split_nn_model import SplitNNModel
+from model.fl_model_dae import VerticalFLModel as VerticalFLModelDae
 
-import shap
+import joblib
+from joblib import Parallel, delayed
 
 os.environ["PROTOBUF_PYTHON_IMPLEMENTATION"] = "python"
 os.environ["CUDA_LAUNCH_BLOCKING"]="1"
@@ -109,10 +111,111 @@ def train_split_nn(num_parties, model_path):
         print("Time(min) {}: ".format(time_min))
     print("Best f1={}".format(f1_list))
 
+def train_fedonce(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 0, k_percent = 100,  k1_percent = 100, select_host = True,
+                  remain_selection = False, random_state = 50, reps = 0.0):
+    num_parties = 2
+    xs_train_val, y_train_val, xs_test, y_test = load_creditcardfraud("data/creditcard/creditcard.csv", use_cache = False,
+                                                        test_rate = 0.2)
+
+    
+    print("Active party {} starts training".format(active_party))
+    score_list = []
+    prec_list = []
+    recall_list = []
+    f1_summary = []
+    kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
+
+    for i, (train_idx, val_idx) in enumerate(kfold):
+        print("Cross Validation Fold {}".format(i))
+        xs_train = [data[train_idx] for data in xs_train_val]
+        y_train = y_train_val[train_idx]
+        xs_val = [data[val_idx] for data in xs_train_val]
+        y_val = y_train_val[val_idx]
+        print("Train shape: {}".format(xs_train[0].shape))
+        print("Val shape: {}".format(xs_val[0].shape))
+        model_name = "vertical_fl_creditcard_party_{}_fold_{}".format(num_parties, i)
+        name = "{}_active_{}_k1_{}_k_{}_random_state_{}".format(model_name, active_party, k1_percent, k_percent, random_state)
+        writer = SummaryWriter("runs/{}".format(name))
+        aggregate_model = VerticalFLModel(
+            num_parties=num_parties,
+            active_party_id=active_party,
+            name=model_name,
+            full_name=name,
+            num_epochs=100,
+            num_local_rounds=100,
+            local_lr=3e-4,
+            local_hidden_layers=[50, 30, 30],
+            local_batch_size=100,
+            local_weight_decay=1e-5,
+            local_output_size=48,
+            num_agg_rounds=1,
+            agg_lr=1e-4,
+            agg_hidden_layers=[10],
+            agg_batch_size=100,
+            agg_weight_decay=1e-4,
+            writer=writer,
+            device='cuda:0',
+            update_target_freq=1,
+            task='binary_classification',
+            n_classes=10,
+            test_batch_size=1000,
+            test_freq=1,
+            cuda_parallel=False,
+            n_channels=1,
+            model_type='fc',
+            optimizer='adam',
+            privacy=None,
+            batches_per_lot=5,
+            epsilon=1,
+            delta=1.0/xs_train[0].shape[0],
+            repr_noise = reps
+        )
+        selected_features = []
+        if False == False and k1_percent < 100:
+            acc, _, _, _, selected_features  = aggregate_model.train(xs_train, y_train, xs_val, y_val, k_percent = k1_percent,
+                                                                    remain_selection = remain_selection)
+        else:
+            acc, _, _, _ , _ = aggregate_model.train(xs_train, y_train, xs_val, y_val)
+        
+        y_test_score = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
+        y_test_pred = np.where(y_test_score > 0.5, 1, 0)
+        test_f1 = f1_score(y_test, y_test_pred)
+        test_prec = precision_score(y_test, y_test_pred)
+        test_recall = recall_score(y_test, y_test_pred)
+
+        print("Active party {} finished training.".format(active_party))
+        score_list.append(acc)
+        f1_summary.append(test_f1)
+        prec_list.append(test_prec)
+        recall_list.append(test_recall)
+        print(aggregate_model.params)
+    
+    print("Accuracy for active party {}".format(active_party) + str(score_list))
+    print("F1 for active party {} with: {}".format(active_party, str(f1_summary)))
+    
+    mean_acc = np.mean(score_list)
+    std = np.std(score_list)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}, noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}, random_state {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, random_state, mean_acc, std)
+    print(out)
+
+    mean_f1 = np.mean(f1_summary)
+    std_f1 = np.std(f1_summary)
+
+    mean_prec = np.mean(prec_list)
+    std_prec = np.std(prec_list)
+
+    mean_recall = np.mean(recall_list)
+    std_recall = np.std(recall_list)
+
+    # out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}, random_state {:.1f}: F1 mean={}, std={}, prec mean={}, std={}, recall mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, random_state, mean_f1, std_f1, mean_prec, std_prec, mean_recall, std_recall)
+    print(out)
+    return mean_acc, mean_f1, mean_prec, mean_recall
+
 def train_fed_once(num_parties):
     score_summary = []
     xs_train_val, y_train_val, xs_test, y_test = load_creditcardfraud("data/creditcard/creditcard.csv", use_cache = False,
-                                                        test_rate = 0.1)
+                                                        test_rate = 0.2)
 
     for party_id in range(num_parties):
         kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
@@ -185,6 +288,110 @@ def train_fed_once(num_parties):
     for i, result in enumerate(score_summary):
         print("Party {}: F1={}".format(i, result))
 
+def train_fedonce_dae(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 0, k_percent = 100, select_host = True, random_state = 50,
+                      k1_percent = 100, reps = 0.0):
+    num_parties = 2
+    xs_train_val, y_train_val, xs_test, y_test = load_creditcardfraud("data/creditcard/creditcard.csv", use_cache = False,
+                                                        test_rate = 0.2)
+
+    print("Active party {} starts training".format(active_party))
+    score_list = []
+    f1_summary = []
+    eval_f1_summary = []
+    prec_list = []
+    recall_list = []
+    kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
+
+    for i, (train_idx, val_idx) in enumerate(kfold):
+        print("Cross Validation Fold {}".format(i))
+        xs_train = [data[train_idx] for data in xs_train_val]
+        y_train = y_train_val[train_idx]
+        xs_val = [data[val_idx] for data in xs_train_val]
+        y_val = y_train_val[val_idx]
+        print("Train shape: {}".format(xs_train[0].shape))
+        print("Val shape: {}".format(xs_val[0].shape))
+        model_name = "vertical_fl_dae_uci_party_{}_fold_{}".format(num_parties, i)
+        name = "{}_active_{}_k1_{}_k_{}_random_state_{}".format(model_name, active_party, k1_percent, k_percent, random_state)
+        writer = SummaryWriter("runs/{}".format(name))
+        aggregate_model = VerticalFLModelDae(
+            num_parties=num_parties,
+            active_party_id=active_party,
+            name=name,
+            full_name=name,
+            num_epochs=100,
+            num_local_rounds=100,
+            local_lr=3e-4,
+            local_hidden_layers=[50, 30],
+            local_batch_size=100,
+            local_weight_decay=1e-5,
+            local_output_size=48,
+            num_agg_rounds=1,
+            agg_lr=1e-4,
+            agg_hidden_layers=[10],
+            agg_batch_size=100,
+            agg_weight_decay=1e-4,
+            writer=writer,
+            device='cuda:0',
+            update_target_freq=1,
+            task='binary_classification',
+            n_classes=10,
+            test_batch_size=1000,
+            test_freq=1,
+            cuda_parallel=False,
+            n_channels=1,
+            model_type='fc',
+            optimizer='adam',
+            privacy=None,
+            batches_per_lot=5,
+            epsilon=1,
+            delta=1.0/xs_train[0].shape[0],
+            repr_noise = reps
+        )
+        selected_features = []
+        if False == False and k1_percent < 100:
+            acc, eval_f1, _, _, selected_features  = aggregate_model.train(xs_train, y_train, xs_val, y_val, k_percent = k1_percent)
+        else:
+            acc, eval_f1, _, _, _  = aggregate_model.train(xs_train, y_train, xs_val, y_val)
+        y_test_score = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
+        y_test_pred = np.where(y_test_score > 0.5, 1, 0)
+        test_f1 = f1_score(y_test, y_test_pred)
+        test_prec = precision_score(y_test, y_test_pred)
+        test_recall = recall_score(y_test, y_test_pred)
+
+        print("Active party {} finished training.".format(active_party))
+        score_list.append(acc)
+        f1_summary.append(test_f1)
+        eval_f1_summary.append(eval_f1)
+        prec_list.append(test_prec)
+        recall_list.append(test_recall)
+        print(aggregate_model.params)
+    
+    print("Accuracy for active party {}".format(active_party) + str(score_list))
+    print("F1 for active party {} with: {}".format(active_party, str(f1_summary)))
+    
+    mean_acc = np.mean(score_list)
+    std = np.std(score_list)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}, noise_ratio {:.1f}, k_percent {:.1f}: Accuracy mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean_acc, std)
+    print(out)
+
+    mean_eval_f1 = np.mean(eval_f1_summary)
+
+    mean_f1 = np.mean(f1_summary)
+    std_f1 = np.std(f1_summary)
+
+    mean_prec = np.mean(prec_list)
+    std_prec = np.std(prec_list)
+
+    mean_recall = np.mean(recall_list)
+    std_recall = np.std(recall_list)
+
+    # out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}: F1 mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, mean, std)
+    out = "Party {}, remove_ratio {:.1f}, beta {:.1f}: noise_ratio {:.1f}, k_percent {:.1f}, k1_percent {:.1f}, random_state {:.1f}: F1 mean={}, std={}, eval F1 mean={}, prec mean={}, std={}, recall mean={}, std={}".format(active_party, remove_ratio, beta, noise_ratio, k_percent, k1_percent, random_state, mean_f1, std_f1, mean_eval_f1, mean_prec, std_prec, mean_recall, std_recall)
+
+    print(out)
+    return mean_acc, mean_f1, mean_prec, mean_recall, random_state, k_percent, k1_percent
+
+
 def train_combine():
     num_parties = 1
     xs_train_val, y_train_val, xs_test, y_test = load_creditcardfraud("data/creditcard/creditcard.csv",num_parties = num_parties, use_cache = False,
@@ -234,7 +441,49 @@ def train_combine():
     print("-------------------------------------------------")
     print("Best accuracy={}".format(f1_list))
 
+
+def run_vertical_fl_multiple_seed():
+    seeds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    # seeds = [20]
+    results = Parallel(n_jobs=6)(delayed(train_fedonce)(random_state = seed) for seed in seeds)
+    acc_mean = np.mean([result[0] for result in results])
+    f1_mean = np.mean([result[1] for result in results])
+    prec_mean = np.mean([result[2] for result in results])
+    recall_mean = np.mean([result[3] for result in results])
+    print("Overall accuracy mean: ", acc_mean)
+    print("Overall f1 mean: ", f1_mean)
+    print("Overall precision mean: ", prec_mean)
+    print("Overall recall mean: ", recall_mean)    
+
+def run_vertical_fl_dae_multiple_seed():
+    seeds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    results = Parallel(n_jobs=6)(delayed(train_fedonce_dae)(random_state = seed) for seed in seeds)
+    acc_mean = np.mean([result[0] for result in results])
+    f1_mean = np.mean([result[1] for result in results])
+    prec_mean = np.mean([result[2] for result in results])
+    recall_mean = np.mean([result[3] for result in results])
+    print("Overall accuracy mean: ", acc_mean)
+    print("Overall f1 mean: ", f1_mean)
+    print("Overall precision mean: ", prec_mean)
+    print("Overall recall mean: ", recall_mean)   
+
 if __name__ == "__main__":
-    train_fed_once(2)
+    # train_fed_once(2)
 #     train_split_nn(num_parties = 2, model_path = "saved_model")
 #     train_combine()
+    # train_fedonce(active_party=0)
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--number", type=int, default=0)
+    args = parser.parse_args()
+    number = args.number
+    if number == 0:
+#         run_vertical_fl_l1_multiple_seed()
+#         train_fedonce_l1(active_party=1, random_state = 50)
+        run_vertical_fl_multiple_seed()
+
+    elif number == 1:
+#         train_fedonce_dae_l1(active_party=1, random_state = 50)
+#         run_vertical_fl_dae_l1_multiple_seed()
+        run_vertical_fl_dae_multiple_seed()

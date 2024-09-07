@@ -728,8 +728,8 @@ def load_uci(test_rate = 0.2, num_parties = 2, remove_ratio = 0,
     return result
     
 
-def load_creditcardfraud(path,use_cache = True, test_rate=0.2, num_parties=2,
-                         remove_ratio = 0.2):
+def load_creditcardfraud(path, use_cache = True, test_rate=0.2, num_parties=2,
+                         remove_ratio = 0.2, random_state = 10):
     if use_cache:
         print("Loading creditcardfraud from cache")
         result = np.load("cache/creditcardfraud.npy", allow_pickle=True)
@@ -757,7 +757,7 @@ def load_creditcardfraud(path,use_cache = True, test_rate=0.2, num_parties=2,
             data[column] = scaler.fit_transform(data[column].values.reshape(-1, 1))
 
 
-        data = data.sample(frac=1, axis = 1, random_state=10)
+        data = data.sample(frac=1, axis = 1, random_state=random_state)
         # data = data.reset_index(drop=True)
         ## add label column to the end
         data['Class'] = label

@@ -7,6 +7,8 @@ from model.single_party_model import SingleParty
 from model.split_nn_model import SplitNNModel
 from utils.split_train_test import split_train_test
 
+from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, precision_score, recall_score
+
 import joblib
 from joblib import Parallel, delayed
 
@@ -51,11 +53,13 @@ def train_fedonce(active_party = 0,  k_percent = 100,  k1_percent = 100,
     cross_valid_data = load_data_cross_validation("phishing.train", num_parties=num_parties,
                                                 file_type='libsvm', n_fold=5, use_cache=False,
                                                 x_scaler_wrapper=x_scaler_wrapper, y_scaler_wrapper=y_scaler_wrapper,
-                                                x_normalizer_wrapper=x_normalizer_wrapper)
+                                                x_normalizer_wrapper=x_normalizer_wrapper,
+                                                random_state = random_state)
     xs_test, y_test = load_data_cross_validation("phishing.test", num_parties=num_parties,
                                                 file_type='libsvm', n_fold=1, use_cache=False,
                                                 x_scaler_wrapper=x_scaler_wrapper, y_scaler_wrapper=y_scaler_wrapper,
-                                                x_normalizer_wrapper=x_normalizer_wrapper)[0]
+                                                x_normalizer_wrapper=x_normalizer_wrapper,
+                                                random_state=random_state)[0]
     acc_summary = []
     f1_summary = []
 
@@ -70,12 +74,12 @@ def train_fedonce(active_party = 0,  k_percent = 100,  k1_percent = 100,
         print("Cross Validation Fold {}".format(i))
         print("Active Party is {}".format(active_party))
         model_name = "fedonce_phishing_party_{}_fold_{}".format(num_parties, i)
-        name = "{}_active_{}".format(model_name, active_party)
+        name = "{}_active_{}_k1_{}_k_{}_random_state_{}".format(model_name, active_party, k1_percent, k_percent, random_state)
         writer = SummaryWriter("runs/{}".format(name))
         aggregate_model = VerticalFLModel(
             num_parties=num_parties,
             active_party_id=active_party,
-            name=model_name,
+            name=name,
             full_name=name,
             num_epochs=300,
             num_local_rounds=100,
@@ -109,6 +113,7 @@ def train_fedonce(active_party = 0,  k_percent = 100,  k1_percent = 100,
             acc, f1, _, _, _ = aggregate_model.train(xs_train, y_train, xs_val, y_val)
         y_score_test = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
         y_pred_test = np.where(y_score_test > 0.5, 1, 0)
+        
         test_acc = accuracy_score(y_test, y_pred_test)
         test_f1 = f1_score(y_test, y_pred_test)
 
@@ -143,7 +148,8 @@ def train_fedonce(active_party = 0,  k_percent = 100,  k1_percent = 100,
     print(out)
     return mean_acc, mean_f1, mean_prec, mean_recall
 
-def train_fedonce_dae(active_party = 0):
+def train_fedonce_dae(active_party = 0,  k_percent = 100,  k1_percent = 100, 
+                  random_state = 10, reps = 0.0):
 
     num_parties = 2
     x_scaler_wrapper = []
@@ -152,27 +158,34 @@ def train_fedonce_dae(active_party = 0):
     cross_valid_data = load_data_cross_validation("phishing.train", num_parties=num_parties,
                                                 file_type='libsvm', n_fold=5, use_cache=False,
                                                 x_scaler_wrapper=x_scaler_wrapper, y_scaler_wrapper=y_scaler_wrapper,
-                                                x_normalizer_wrapper=x_normalizer_wrapper)
+                                                x_normalizer_wrapper=x_normalizer_wrapper,
+                                                random_state = random_state)    
     xs_test, y_test = load_data_cross_validation("phishing.test", num_parties=num_parties,
                                                 file_type='libsvm', n_fold=1, use_cache=False,
                                                 x_scaler_wrapper=x_scaler_wrapper, y_scaler_wrapper=y_scaler_wrapper,
-                                                x_normalizer_wrapper=x_normalizer_wrapper)[0]
+                                                x_normalizer_wrapper=x_normalizer_wrapper,
+                                                random_state= random_state)[0]
     acc_summary = []
     f1_summary = []
     
     acc_list = []
     f1_list = []
+
+    prec_list = []
+    recall_list = []
+    score_list = []
+
     for i, (xs_train, y_train, xs_val, y_val) in enumerate(cross_valid_data):
         start = datetime.now()
         print("Cross Validation Fold {}".format(i))
         print("Active Party is {}".format(active_party))
         model_name = "fedonce_dae_phishing_party_{}_fold_{}".format(num_parties, i)
-        name = "{}_active_{}".format(model_name, active_party)
+        name = "{}_active_{}_k1_{}_k_{}_random_state_{}".format(model_name, active_party, k1_percent, k_percent, random_state)
         writer = SummaryWriter("runs/{}".format(name))
         aggregate_model = VerticalFLModelDae(
             num_parties=num_parties,
             active_party_id=active_party,
-            name=model_name,
+            name=name,
             full_name=name,
             num_epochs=300,
             num_local_rounds=100,
@@ -199,13 +212,29 @@ def train_fedonce_dae(active_party = 0):
             optimizer='adam',
             num_workers=0
         )
-        acc, f1, _, _, _ = aggregate_model.train(xs_train, y_train, xs_val, y_val)
-        y_score_test = aggregate_model.predict_agg(xs_test)
+        selected_features = []
+        if k1_percent < 100:
+            acc, _, _, _, selected_features  = aggregate_model.train(xs_train, y_train, xs_val, y_val, k_percent = k1_percent)
+        else:                                        
+            acc, f1, _, _, _ = aggregate_model.train(xs_train, y_train, xs_val, y_val)
+       
+        y_score_test = aggregate_model.predict_agg(xs_test, selection_features = selected_features)
         y_pred_test = np.where(y_score_test > 0.5, 1, 0)
+        
         test_acc = accuracy_score(y_test, y_pred_test)
         test_f1 = f1_score(y_test, y_pred_test)
+
+        test_prec = precision_score(y_test, y_pred_test)
+        test_recall = recall_score(y_test, y_pred_test)
+
+        print("Test Accuracy: ", test_acc)
+        print("Test F1: ", test_f1)
         acc_list.append(test_acc)
         f1_list.append(test_f1)
+        score_list.append(acc)
+        prec_list.append(test_prec)
+        recall_list.append(test_recall)
+
         print(aggregate_model.params)
         time_min = (datetime.now() - start).seconds / 60
         print("Time(min) {}: ".format(time_min))
@@ -216,6 +245,15 @@ def train_fedonce_dae(active_party = 0):
     print("Accuracy for party {}".format(active_party) + str(acc_list))
     print("F1 score for party {}".format(active_party) + str(f1_list))
     print("-------------------------------------------------")
+
+    mean_acc = np.mean(acc_list)
+    mean_f1 = np.mean(f1_list)
+    mean_prec = np.mean(prec_list)
+    mean_recall = np.mean(recall_list)
+
+    out = "Party {}, k_percent {:.1f}, k1_percent {:.1f}, random_state {:.1f}: F1 mean={}, prec mean={}, recall mean={}".format(active_party, k_percent, k1_percent, random_state, mean_f1, mean_prec,  mean_recall)
+    print(out)
+    return mean_acc, mean_f1, mean_prec, mean_recall
 
 
 def run_vertical_fl_ft_selection_all_ration_select_guest(active_party, reps = 0.0):

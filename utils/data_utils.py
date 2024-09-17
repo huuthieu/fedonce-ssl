@@ -309,7 +309,8 @@ def load_data_cross_validation(file_name, num_parties=1, root="data/", file_type
                                x_scaler_wrapper=None, y_scaler_wrapper=None, x_normalizer_wrapper=None,
                                add_noise = False,
                               remove_noise = False,
-                              overlap_ratio =  0):
+                              overlap_ratio =  0,
+                              random_state = 10):
     if use_cache and os.path.isfile(cache_path):
         print("Loading data from cache: " + cache_path)
         with open(cache_path, 'rb') as f:
@@ -394,6 +395,12 @@ def load_data_cross_validation(file_name, num_parties=1, root="data/", file_type
         assert feature_order.size == x.shape[1], "Feature orders mismatch the number of features"
         x = x[:, feature_order]
 
+    rng = np.random.RandomState(random_state)
+
+    # Tạo một chỉ số hoán đổi
+    permutation_indices = rng.permutation(x.shape[1])   
+    x = x[:, permutation_indices] 
+
     if shift_alpha is not None:
         shift = -int(x.shape[1] * shift_alpha)
         x = np.roll(x, shift, axis=1)
@@ -441,7 +448,7 @@ def load_data_cross_validation(file_name, num_parties=1, root="data/", file_type
                 xs_test = vertical_split_image(x_test, num_parties)
             else:
                 raise UnsupportedFormatError
-
+            
             results.append([xs_train, y_train, xs_test, y_test])
             print("Fold {} finished".format(i))
     else:       # fold = 1
@@ -777,8 +784,8 @@ def load_creditcardfraud(path, use_cache = True, test_rate=0.2, num_parties=2,
 #         train_data = vertical_split(train_data, num_parties)
 #         test_data = vertical_split(test_data, num_parties)
 
-        train_data = bias_vertical_split(train_data, 0.3)
-        test_data = bias_vertical_split(test_data, 0.3)
+        train_data = bias_vertical_split(train_data, 0.5)
+        test_data = bias_vertical_split(test_data, 0.5)
         
         if remove_ratio > 0:
             train_data = rm_noise_list([*train_data], remove_ratio)

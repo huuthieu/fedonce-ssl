@@ -143,8 +143,8 @@ def train_fedonce(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 
             full_name=name,
             num_epochs=100,
             num_local_rounds=100,
-            local_lr=3e-4,
-            local_hidden_layers=[50, 30, 30],
+            local_lr=1e-4,
+            local_hidden_layers=[100, 100, 50],
             local_batch_size=100,
             local_weight_decay=1e-5,
             local_output_size=48,
@@ -441,9 +441,101 @@ def train_combine():
     print("-------------------------------------------------")
     print("Best accuracy={}".format(f1_list))
 
+def train_solo(random_state = 20):
+    num_parties = 1
+    xs_train_val, y_train_val, xs_test, y_test = load_creditcardfraud("data/creditcard/creditcard.csv", use_cache = False,
+                                                        test_rate = 0.2, random_state = random_state)
+    # x_train_val = np.concatenate(xs_train_val, axis=1)
+    # x_test = np.concatenate(xs_test, axis=1)
+    x_train_val = xs_train_val[0]
+    x_test = xs_test[0]
+    print(x_train_val.shape)
+    print(x_test.shape)
+    kfold = KFold(n_splits=5, shuffle=True, random_state=0).split(y_train_val)
+    f1_list = []
+    prec_list = []
+    recall_list = []
+    score_list = []
+    for i, (train_idx, val_idx) in enumerate(kfold):
+        print("Cross Validation Fold {}".format(i))
+        x_train = x_train_val[train_idx]
+        y_train = y_train_val[train_idx]
+        x_val = x_train_val[val_idx]
+        y_val = y_train_val[val_idx]
+        name = "combine_movielens_fold_{}_random_state_{}".format(i, random_state)
+        writer = SummaryWriter("runs/{}".format(name))
+        single_model = SingleParty(
+            party_id=0,
+            num_epochs=100,
+            lr=1e-4,
+            name = name,
+            hidden_layers=[50, 30, 10],
+            batch_size=128,
+            weight_decay=1e-4,
+            writer=writer,
+            device='cuda:0',
+            task="binary_classification",
+            test_batch_size=1000,
+            test_freq=1,
+            model_type='fc',
+            optimizer='adam',
+            cuda_parallel=False,
+            n_channels=1,
+            n_classes = 1
+        )
+        acc, _, _, _ = single_model.train(x_train, y_train, x_val, y_val)
+        _, y_score_test = single_model.predict(x_test)
+        y_test_pred = np.where(y_score_test > 0.5, 1, 0)
+        test_f1 = f1_score(y_test, y_test_pred)
+        f1_list.append(test_f1)
+        score_list.append(acc)
+
+        test_prec = precision_score(y_test, y_test_pred)
+        test_recall = recall_score(y_test, y_test_pred)
+
+        prec_list.append(test_prec)
+        recall_list.append(test_recall)
+        
+        print(single_model.params)
+        
+    # explainer = shap.Explainer(single_model.predict_score, x_train)
+    # shap_values = explainer.shap_values(x_test)
+    # feature_importance = np.abs(shap_values).mean(axis=0)
+    # print("Feature importance: ", feature_importance)   
+    # print("-------------------------------------------------")
+    print("Best accuracy={}".format(f1_list))
+
+    mean_acc = np.mean(score_list)
+    
+    mean_f1 = np.mean(f1_list)
+    std_f1 = np.std(f1_list)
+
+    mean_prec = np.mean(prec_list)
+    std_prec = np.std(prec_list)
+
+    mean_recall = np.mean(recall_list)
+    std_recall = np.std(recall_list)
+    return mean_acc, mean_f1, mean_prec, mean_recall
+
+
+def run_solo_multiple_seed():
+    # seeds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    seeds = [10]
+    results = Parallel(n_jobs=6)(delayed(train_solo)(random_state = seed) for seed in seeds)
+    acc_mean = np.mean([result[0] for result in results])
+    f1_mean = np.mean([result[1] for result in results])
+    prec_mean = np.mean([result[2] for result in results])
+    recall_mean = np.mean([result[3] for result in results])
+    print("Overall accuracy mean: ", acc_mean)
+    print("Overall f1 mean: ", f1_mean)
+    print("Overall precision mean: ", prec_mean)
+    print("Overall recall mean: ", recall_mean)  
+
 
 def run_vertical_fl_multiple_seed():
-    seeds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    # seeds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    seeds = [10, 20, 30, 40, 50]
+    # seeds = [60, 70, 80, 90, 100]
     # seeds = [20]
     results = Parallel(n_jobs=6)(delayed(train_fedonce)(random_state = seed) for seed in seeds)
     acc_mean = np.mean([result[0] for result in results])
@@ -456,7 +548,9 @@ def run_vertical_fl_multiple_seed():
     print("Overall recall mean: ", recall_mean)    
 
 def run_vertical_fl_dae_multiple_seed():
-    seeds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    # seeds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    # seeds = [10, 20, 30, 40, 50]
+    seeds = [60, 70, 80, 90, 100]
     results = Parallel(n_jobs=6)(delayed(train_fedonce_dae)(random_state = seed) for seed in seeds)
     acc_mean = np.mean([result[0] for result in results])
     f1_mean = np.mean([result[1] for result in results])
@@ -468,22 +562,26 @@ def run_vertical_fl_dae_multiple_seed():
     print("Overall recall mean: ", recall_mean)   
 
 if __name__ == "__main__":
-    # train_fed_once(2)
-#     train_split_nn(num_parties = 2, model_path = "saved_model")
-#     train_combine()
-    # train_fedonce(active_party=0)
+#     # train_fed_once(2)
+# #     train_split_nn(num_parties = 2, model_path = "saved_model")
+# #     train_combine()
+#     # train_fedonce(active_party=0)
+    
+    # run_vertical_fl_multiple_seed()
+    # run_vertical_fl_dae_multiple_seed()
+    run_solo_multiple_seed()
 
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--number", type=int, default=0)
-    args = parser.parse_args()
-    number = args.number
-    if number == 0:
-#         run_vertical_fl_l1_multiple_seed()
-#         train_fedonce_l1(active_party=1, random_state = 50)
-        run_vertical_fl_multiple_seed()
+#     import argparse
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument("--number", type=int, default=0)
+#     args = parser.parse_args()
+#     number = args.number
+#     if number == 0:
+# #         run_vertical_fl_l1_multiple_seed()
+# #         train_fedonce_l1(active_party=1, random_state = 50)
+#         run_vertical_fl_multiple_seed()
 
-    elif number == 1:
-#         train_fedonce_dae_l1(active_party=1, random_state = 50)
-#         run_vertical_fl_dae_l1_multiple_seed()
-        run_vertical_fl_dae_multiple_seed()
+#     elif number == 1:
+# #         train_fedonce_dae_l1(active_party=1, random_state = 50)
+# #         run_vertical_fl_dae_l1_multiple_seed()
+#         run_vertical_fl_dae_multiple_seed()

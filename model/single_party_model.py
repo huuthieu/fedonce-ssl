@@ -29,7 +29,7 @@ class SingleParty:
                  writer: SummaryWriter = None, device='cpu', task="binary_classification", model_type='fc',
                  test_batch_size=1000, n_classes=10, test_freq=1, n_channels=3, optimizer='sgd', cuda_parallel=False,
                  num_workers=0, momentum=0, privacy=None, batches_per_lot=1, epsilon=1, delta=0, grad_norm_C=1,
-                 ncf_counts=None, ncf_embed_dims=None):
+                 ncf_counts=None, ncf_embed_dims=None, name = ""):
 
         self.ncf_counts = ncf_counts
         self.ncf_embed_dims = ncf_embed_dims
@@ -55,6 +55,7 @@ class SingleParty:
         self.hidden_layers = hidden_layers
         self.num_epochs = num_epochs
         self.writer = writer
+        self.name = name
 
         self.model = None
 
@@ -206,6 +207,8 @@ class SingleParty:
         best_test_rmse = np.inf
         total_loss = 0.0
         num_mini_batches = 0
+        model_path = "cache/{}_agg_model_dim.pth".format(self.name)
+
         print("Start training")
         for i in range(self.num_epochs):
             start_epoch_time = datetime.now()
@@ -278,6 +281,7 @@ class SingleParty:
                         test_auc = roc_auc_score(y_test, y_score_test)
                         if test_f1 > best_test_f1:
                             best_test_f1 = test_f1
+                            torch.save(self.model.state_dict(), model_path)
                         if test_acc > best_test_acc:
                             best_test_acc = test_acc
                         if test_auc > best_test_auc:
@@ -332,6 +336,7 @@ class SingleParty:
                         raise UnsupportedTaskError
             epoch_duration_sec = (datetime.now() - start_epoch_time).seconds
             print("Epoch {} duration {} sec".format(i + 1, epoch_duration_sec), flush=True)
+        self.model.load_state_dict(torch.load(model_path))
         return best_test_acc, best_test_f1, best_test_rmse, best_test_auc
 
     def predict(self, X):

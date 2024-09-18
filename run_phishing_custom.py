@@ -26,10 +26,6 @@ from datetime import datetime
 import argparse
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--gpu', '-g', type=int, default=0, help='Index of GPU')
-args = parser.parse_args()
-
 
 if not os.path.isdir("data"):
     os.mkdir("data")
@@ -94,7 +90,7 @@ def train_fedonce(active_party = 0,  k_percent = 100,  k1_percent = 100,
             agg_batch_size=100,
             agg_weight_decay=1e-4,
             writer=writer,
-            device='cuda:{}'.format(args.gpu),
+            device='cuda:0',
             update_target_freq=1,
             task='binary_classification',
             n_classes=10,
@@ -104,7 +100,8 @@ def train_fedonce(active_party = 0,  k_percent = 100,  k1_percent = 100,
             n_channels=1,
             model_type='fc',
             optimizer='adam',
-            num_workers=0
+            num_workers=0,
+            repr_noise=reps
         )
         selected_features = []
         if k1_percent < 100:
@@ -200,7 +197,7 @@ def train_fedonce_dae(active_party = 0,  k_percent = 100,  k1_percent = 100,
             agg_batch_size=100,
             agg_weight_decay=1e-4,
             writer=writer,
-            device='cuda:{}'.format(args.gpu),
+            device='cuda:0',
             update_target_freq=1,
             task='binary_classification',
             n_classes=10,
@@ -210,7 +207,8 @@ def train_fedonce_dae(active_party = 0,  k_percent = 100,  k1_percent = 100,
             n_channels=1,
             model_type='fc',
             optimizer='adam',
-            num_workers=0
+            num_workers=0,
+            repr_noise=reps
         )
         selected_features = []
         if k1_percent < 100:
@@ -262,7 +260,38 @@ def run_vertical_fl_ft_selection_all_ration_select_guest(active_party, reps = 0.
                                                 reps = reps) for ratio in ratios)
     
 
+def run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party, reps = 0.0):
+    ratios = np.arange(0.1, 1.0, 0.1)
+    Parallel(n_jobs=-1)(delayed(train_fedonce_dae)(active_party = active_party, k_percent = 100, k1_percent = ratio*100,
+                                                reps = reps) for ratio in ratios)
+    
+
 if __name__ == "__main__":
     # train_fedonce()
     # train_fedonce_dae()
-    run_vertical_fl_ft_selection_all_ration_select_guest(active_party=0)
+    # run_vertical_fl_ft_selection_all_ration_select_guest(active_party=0)
+    # run_vertical_fl_ft_selection_all_ration_select_guest(active_party=0, reps=0.5)
+    # run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party=0)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--number", type=int, default=0)
+    args = parser.parse_args()
+    number = args.number
+    if number == 0:
+#         run_vertical_fl_l1_multiple_seed()
+#         train_fedonce_l1(active_party=1, random_state = 50)
+        run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party=0, reps = 0.5)
+
+    elif number == 1:
+#         train_fedonce_dae_l1(active_party=1, random_state = 50)
+#         run_vertical_fl_dae_l1_multiple_seed()
+        run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party=0, reps = 1.0)
+    elif number == 2:
+#         train_fedonce_l1(active_party=1)
+        run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party=0, reps = 1.5)
+#     elif number == 3:
+# #         train_fedonce_l1(active_party=1)
+#         run_vertical_fl_ft_selection_all_ration_select_guest(active_party=0, reps = 1.5)
+# #     elif number == 4:
+# # #         train_fedonce_l1(active_party=1)
+# #         run_vertical_fl_dae_ft_selection_all_ration_select_guest(active_party=1, random_state = 50, reps = 1.0)

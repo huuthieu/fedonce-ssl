@@ -251,6 +251,7 @@ class VerticalFLModel:
 
                 if self.privacy == 'MA' and ((j + 1) % self.batches_per_lot != 0) and (j + 1 < len(data_loader)):
                 # if False:
+                    print("Virtual step")
                     optimizer.virtual_step()
                 else:
                     optimizer.step()
@@ -395,12 +396,14 @@ class VerticalFLModel:
                 print("[Aggregating] Epoch {}: training loss {}"
                       .format(ep * self.num_agg_rounds + i + 1, total_loss / num_mini_batches))
             elif self.privacy == 'MA':
-                epsilon, alpha = optimizer.privacy_engine.get_privacy_spent(self.delta)
-                print("[Aggregating] Epoch {}: training loss {}, eps {}, delta {}, alpha {}"
-                      .format(ep * self.num_agg_rounds + i + 1, total_loss / num_mini_batches, epsilon, self.delta,
-                              alpha))
-                self.writer.add_scalar('Aggregation privacy accumulation',
-                                       epsilon, ep * self.num_agg_rounds + i + 1)
+                print("[Aggregating] Epoch {}: training loss {}"
+                      .format(ep * self.num_agg_rounds + i + 1, total_loss / num_mini_batches))
+                # epsilon, alpha = optimizer.privacy_engine.get_privacy_spent(self.delta)
+                # print("[Aggregating] Epoch {}: training loss {}, eps {}, delta {}, alpha {}"
+                #       .format(ep * self.num_agg_rounds + i + 1, total_loss / num_mini_batches, epsilon, self.delta,
+                #               alpha))
+                # self.writer.add_scalar('Aggregation privacy accumulation',
+                #                        epsilon, ep * self.num_agg_rounds + i + 1)
             else:
                 raise UnsupportedPrivacyMechanismError
             # print("[Aggregating] Epoch {}: training loss {}"
@@ -610,10 +613,10 @@ class VerticalFLModel:
             # import pdb; pdb.set_trace()
             Z = pred_labels[passive_party_range, :, :].transpose((1, 0, 2)).reshape(num_instances, -1)
 
-        if self.task in ["binary_classification", "regression"]:
+        if self.task in ["binary_classification", "regression"] and k_percent < 100:
             num_features = Xs[self.active_party_id].shape[1]
             if self.model_type == 'fc':
-                active_model = FC(num_features, self.local_hidden_layers, output_size=self.local_output_dim)
+                active_model = FC(num_features, self.local_hidden_layers[:-1], output_size=self.local_output_dim)
                 self.agg_model = AggModelTest( input_size= self.local_output_dim + Z.shape[1],
                                           mid_output_dim=self.local_output_dim,
                                           num_parties=self.num_parties,
@@ -634,6 +637,19 @@ class VerticalFLModel:
                                           activation=None)
             else:
                 assert False
+
+        elif self.task in ["binary_classification", "regression"] and k_percent == 100:
+                if self.model_type == 'fc':
+                    num_features = Xs[self.active_party_id].shape[1]
+                    # active_model = FC(num_features, self.local_hidden_layers, output_size=self.local_output_dim)
+                    active_model = FC(num_features, [50, 30], output_size=self.local_output_dim)
+                    self.agg_model = AggModel(mid_output_dim=self.local_output_dim,
+                                            num_parties=self.num_parties,
+                                            agg_hidden_sizes=self.agg_hidden_layers,
+                                            active_model=active_model,
+                                            output_dim=1,
+                                            activation='sigmoid')
+        
         elif self.task in ["multi_classification"]:
             if self.model_type == 'resnet18':
                 active_model = ResNet18(image_size=self.image_size, num_classes=self.local_output_dim)
@@ -665,6 +681,8 @@ class VerticalFLModel:
         else:
             raise UnsupportedTaskError
 
+        # import pdb; pdb.set_trace()
+
         # train agg model
         print("Start training aggregation model")
         # optimizer should be defined here for once due to torchdp
@@ -687,15 +705,16 @@ class VerticalFLModel:
         if self.privacy is None:
             pass
         elif self.privacy == "MA":
-            privacy_engine = PrivacyEngine(
-                module=self.agg_model,
-                batch_size=self.agg_dp_getter.batch_size,
-                sample_size=self.agg_dp_getter.num_instances,
-                alphas=[self.agg_dp_getter.alpha],
-                noise_multiplier=self.agg_dp_getter.sigma,
-                max_grad_norm=self.grad_norm_C
-            )
-            privacy_engine.attach(model_optimizer)
+            pass
+            # privacy_engine = PrivacyEngine(
+            #     module=self.agg_model,
+            #     batch_size=self.agg_dp_getter.batch_size,
+            #     sample_size=self.agg_dp_getter.num_instances,
+            #     alphas=[self.agg_dp_getter.alpha],
+            #     noise_multiplier=self.agg_dp_getter.sigma,
+            #     max_grad_norm=self.grad_norm_C
+            # )
+            # privacy_engine.attach(model_optimizer)
         else:
             raise UnsupportedPrivacyMechanismError
         

@@ -112,9 +112,10 @@ def train_split_nn(num_parties, model_path):
     print("Best f1={}".format(f1_list))
 
 def train_fedonce(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 0, k_percent = 100,  k1_percent = 100, select_host = True,
-                  remain_selection = False, random_state = 50, reps = 0.0):
+                  remain_selection = False, random_state = 50, reps = 0.5):
     num_parties = 2
     xs_train_val, y_train_val, xs_test, y_test = load_creditcardfraud("data/creditcard/creditcard.csv", use_cache = False,
+                                                        random_state= random_state,
                                                         test_rate = 0.2)
 
     
@@ -534,7 +535,7 @@ def run_solo_multiple_seed():
 
 def run_vertical_fl_multiple_seed():
     # seeds = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-    seeds = [10, 20, 30, 40, 50]
+    seeds = [10, 20]
     # seeds = [60, 70, 80, 90, 100]
     # seeds = [20]
     results = Parallel(n_jobs=6)(delayed(train_fedonce)(random_state = seed) for seed in seeds)
@@ -567,9 +568,9 @@ if __name__ == "__main__":
 # #     train_combine()
 #     # train_fedonce(active_party=0)
     
-    # run_vertical_fl_multiple_seed()
+    run_vertical_fl_multiple_seed()
     # run_vertical_fl_dae_multiple_seed()
-    run_solo_multiple_seed()
+    # run_solo_multiple_seed()
 
 #     import argparse
 #     parser = argparse.ArgumentParser()

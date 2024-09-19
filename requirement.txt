@@ -25,3 +25,7 @@ torch_optimizer
 wget
 progress
 ucimlrepo
+xgboost
+matplotlib
+tensorboard
+einops

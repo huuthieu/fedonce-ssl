@@ -290,7 +290,7 @@ def train_fed_once(num_parties):
         print("Party {}: F1={}".format(i, result))
 
 def train_fedonce_dae(remove_ratio = 0, active_party = 0, beta = 0.5, noise_ratio = 0, k_percent = 100, select_host = True, random_state = 50,
-                      k1_percent = 100, reps = 0.0):
+                      k1_percent = 100, reps = 1.0):
     num_parties = 2
     xs_train_val, y_train_val, xs_test, y_test = load_creditcardfraud("data/creditcard/creditcard.csv", use_cache = False,
                                                         random_state= random_state,

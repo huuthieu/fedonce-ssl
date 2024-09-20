@@ -569,7 +569,8 @@ if __name__ == "__main__":
 # #     train_combine()
 #     # train_fedonce(active_party=0)
     
-    run_vertical_fl_multiple_seed()
+    # run_vertical_fl_multiple_seed()
+    train_fedonce_dae(active_party=0, random_state = 50)
     # run_vertical_fl_dae_multiple_seed()
     # run_solo_multiple_seed()
 

@@ -193,12 +193,8 @@ class VerticalFLModel:
         dae = DAE(device='cuda:0', body_network_cfg=dict(hidden_size=16))
 
         dae.fit(X_df, max_epochs=self.num_local_rounds, batch_size=self.local_batch_size, model_checkpoint = model_checkpoint, verbose=1,
-                dp_batch_size = self.agg_dp_getter.batch_size,
-                dp_num_instances = self.agg_dp_getter.num_instances,
-                alpha = self.agg_dp_getter.alpha,
-                sigma = self.agg_dp_getter.sigma,
-                grad_norm_C = self.grad_norm_C,
-                privacy = True)
+                 validation_ratio = 0.15,
+                privacy = False)
     
         return dae
 
@@ -313,12 +309,14 @@ class VerticalFLModel:
                 print("[Aggregating] Epoch {}: training loss {}"
                       .format(ep * self.num_agg_rounds + i + 1, total_loss / num_mini_batches))
             elif self.privacy == 'MA':
-                epsilon, alpha = optimizer.privacy_engine.get_privacy_spent(self.delta)
-                print("[Aggregating] Epoch {}: training loss {}, eps {}, delta {}, alpha {}"
-                      .format(ep * self.num_agg_rounds + i + 1, total_loss / num_mini_batches, epsilon, self.delta,
-                              alpha))
-                self.writer.add_scalar('Aggregation privacy accumulation',
-                                       epsilon, ep * self.num_agg_rounds + i + 1)
+                print("[Aggregating] Epoch {}: training loss {}"
+                      .format(ep * self.num_agg_rounds + i + 1, total_loss / num_mini_batches))
+                # epsilon, alpha = optimizer.privacy_engine.get_privacy_spent(self.delta)
+                # print("[Aggregating] Epoch {}: training loss {}, eps {}, delta {}, alpha {}"
+                #       .format(ep * self.num_agg_rounds + i + 1, total_loss / num_mini_batches, epsilon, self.delta,
+                #               alpha))
+                # self.writer.add_scalar('Aggregation privacy accumulation',
+                #                        epsilon, ep * self.num_agg_rounds + i + 1)
             else:
                 raise UnsupportedPrivacyMechanismError
             # print("[Aggregating] Epoch {}: training loss {}"
@@ -527,8 +525,17 @@ class VerticalFLModel:
         elif self.task in ["binary_classification", "regression"] and k_percent == 100:
             if self.model_type == 'fc':
                 num_features = Xs[self.active_party_id].shape[1]
-                active_model = FC(num_features, self.local_hidden_layers, output_size=self.local_output_dim)
-                self.agg_model = AggModel(mid_output_dim=self.local_output_dim,
+                # active_model = FC(num_features, self.local_hidden_layers, output_size=self.local_output_dim)
+                # self.agg_model = AggModel(mid_output_dim=self.local_output_dim,
+                #                           num_parties=self.num_parties,
+                #                           agg_hidden_sizes=self.agg_hidden_layers,
+                #                           active_model=active_model,
+                #                           output_dim=1,
+                #                           activation='sigmoid')
+
+                active_model = FC(num_features, self.local_hidden_layers, output_size=32)
+                self.agg_model = AggModelTest( input_size= 32 + Z.shape[1],
+                                          mid_output_dim=self.local_output_dim,
                                           num_parties=self.num_parties,
                                           agg_hidden_sizes=self.agg_hidden_layers,
                                           active_model=active_model,
@@ -564,7 +571,6 @@ class VerticalFLModel:
                                       activation=None)
         else:
             raise UnsupportedTaskError
-
         # train agg model
         print("Start training aggregation model")
         # optimizer should be defined here for once due to torchdp
@@ -587,15 +593,16 @@ class VerticalFLModel:
         if self.privacy is None:
             pass
         elif self.privacy == "MA":
-            privacy_engine = PrivacyEngine(
-                module=self.agg_model,
-                batch_size=self.agg_dp_getter.batch_size,
-                sample_size=self.agg_dp_getter.num_instances,
-                alphas=[self.agg_dp_getter.alpha],
-                noise_multiplier=self.agg_dp_getter.sigma,
-                max_grad_norm=self.grad_norm_C
-            )
-            privacy_engine.attach(model_optimizer)
+            pass
+            # privacy_engine = PrivacyEngine(
+            #     module=self.agg_model,
+            #     batch_size=self.agg_dp_getter.batch_size,
+            #     sample_size=self.agg_dp_getter.num_instances,
+            #     alphas=[self.agg_dp_getter.alpha],
+            #     noise_multiplier=self.agg_dp_getter.sigma,
+            #     max_grad_norm=self.grad_norm_C
+            # )
+            # privacy_engine.attach(model_optimizer)
         else:
             raise UnsupportedPrivacyMechanismError
         
@@ -625,6 +632,9 @@ class VerticalFLModel:
                         test_acc = accuracy_score(y_test, y_pred_test)
                         train_f1 = f1_score(y, y_pred_train)
                         test_f1 = f1_score(y_test, y_pred_test)
+                        
+                        # import pdb; pdb.set_trace()
+                        
                         train_auc = roc_auc_score(y, y_score_train)
                         test_auc = roc_auc_score(y_test, y_score_test)
                         if (test_f1 >= best_test_f1) and (ep > 2):
